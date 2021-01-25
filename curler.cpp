@@ -3,6 +3,7 @@
 #include <curl/curl.h>
 #include <cmath>
 #include <cstdio>
+#include <ctime>
 #include <iostream>
 #include <map>
 #include <string.h>
@@ -104,11 +105,29 @@ static int progress_func(void *ptr, double total_to_download, double now_downloa
 	return 0;
     }
 
+    // For measuring download speed
+    static double old_now_downloaded = 0;
+    static time_t old_seconds = std::time(NULL);
+    double download_since_last = 0;
+    time_t current_seconds = std::time(NULL);
+    time_t seconds_since_last = current_seconds - old_seconds;
+
+    if (old_now_downloaded < now_downloaded) // Make sure we dont get wrong data when file changes
+	download_since_last = now_downloaded - old_now_downloaded;
+    else
+	download_since_last = now_downloaded;
+
+    // Calculate current download speed :
+    // (now_downloaded - old_now_downloaded) / (current_seconds - old_seconds)
+    double current_dl_speed = download_since_last / (double)seconds_since_last;
+
     // determine what units we will use
     const char *dlunit;
     const char *ndunit;
+    const char *spunit;
     double total_size;
     double downloaded;
+    double dlspeed;
     if (total_to_download >= TBYTE) {
 	dlunit = "TiB";
 	total_size = total_to_download / TBYTE;
@@ -143,6 +162,23 @@ static int progress_func(void *ptr, double total_to_download, double now_downloa
 	downloaded = now_downloaded;
     }
 
+    if (current_dl_speed >= TBYTE) {
+	spunit = "TiB/s";
+	dlspeed = current_dl_speed / TBYTE;
+    } else if (current_dl_speed >= GBYTE) {
+	spunit = "GiB/s";
+	dlspeed = current_dl_speed / GBYTE;
+    } else if (current_dl_speed >= MBYTE) {
+	spunit = "MiB/s";
+	dlspeed = current_dl_speed / MBYTE;
+    } else if (current_dl_speed >= KBYTE) {
+	spunit = "KiB/s";
+	dlspeed = current_dl_speed / KBYTE;
+    } else {
+	spunit = "B/s";
+	dlspeed = current_dl_speed;
+    }
+
     // width of progress bar
     int totaldots = 40;
     double fraction_downloaded = now_downloaded / total_to_download;
@@ -160,7 +196,10 @@ static int progress_func(void *ptr, double total_to_download, double now_downloa
     for (; i < totaldots; i++) {
 	printf(" ");
     }
-    printf("] %3.0f %s / %3.0f %s\r", downloaded, ndunit, total_size, dlunit);
+    if (std::isinf(dlspeed))
+	printf("] %.2f %s / %.2f %s\r", downloaded, ndunit, total_size, dlunit);
+    else
+	printf("] %.2f %s / %.2f %s (%.2f %s)\r", downloaded, ndunit, total_size, dlunit, dlspeed, spunit);
     fflush(stdout);
     std::cout.flush();
 
@@ -265,7 +304,7 @@ static bool do_download(const char *filename, const char *url, curl_off_t resume
 }
 
 
-// Determine filename from url
+// Determine filename, then send to the other download function
 bool download(const std::string &path, const std::string &url)
 {
     CURL *curl;
