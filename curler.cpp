@@ -15,6 +15,10 @@
 #define GBYTE (double(1024) * MBYTE)
 #define TBYTE (double(1024) * GBYTE)
 
+#define MINUTE double(60)
+#define HOUR  (double(60) * MINUTE)
+#define DAY   (double(24) * HOUR)
+
 typedef std::map<const std::string, std::variant<long, std::string>>  HEADERS;
 typedef std::map<const std::string, const std::string> MIMETYPES;
 
@@ -100,28 +104,29 @@ static size_t write_data(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 static int progress_func(void *ptr, double total_to_download, double now_downloaded,
 			 double total_to_upload, double now_uploaded)
 {
-    // makes sure the file is not empty
+    // Make sure the file is not empty
     if (total_to_download <= 0.0) {
 	return 0;
     }
 
-    // For measuring download speed
-    static double old_now_downloaded = 0;
-    static time_t old_seconds = std::time(NULL);
-    double download_since_last = 0;
-    time_t current_seconds = std::time(NULL);
-    time_t seconds_since_last = current_seconds - old_seconds;
+    /* For measuring download speed & time remaining */
+    static double current_total = total_to_download;
+    static time_t start_time = std::time(NULL);
+    // Watch total_to_download to see if the file changes
+    if (current_total != total_to_download) {
+	current_total = total_to_download;
+	start_time = std::time(NULL);
+    }
+    time_t current_time = std::time(NULL);
+    time_t transfer_time = start_time - current_time;
+    double fraction_downloaded = now_downloaded / total_to_download;
+    // Calculate time remaining
+    double transfer_eta = transfer_time / fraction_downloaded;
+    double download_eta = transfer_time - transfer_eta;
+    // Calculate download speed
+    double current_dl_speed = (now_downloaded / transfer_time) * -1; // We get negative values back
 
-    if (old_now_downloaded < now_downloaded) // Make sure we dont get wrong data when file changes
-	download_since_last = now_downloaded - old_now_downloaded;
-    else
-	download_since_last = now_downloaded;
-
-    // Calculate current download speed :
-    // (now_downloaded - old_now_downloaded) / (current_seconds - old_seconds)
-    double current_dl_speed = download_since_last / (double)seconds_since_last;
-
-    // determine what units we will use
+    /* Determine what units we should use */
     const char *dlunit;
     const char *ndunit;
     const char *spunit;
@@ -179,15 +184,43 @@ static int progress_func(void *ptr, double total_to_download, double now_downloa
 	dlspeed = current_dl_speed;
     }
 
-    // width of progress bar
+    // Time units
+    double days=0, hours=0, mins=0, secs=0;
+    if (download_eta >= DAY) {
+	days  = download_eta / DAY;
+	hours = days / HOUR;
+	mins  = hours / MINUTE;
+	secs  = (int)mins % (int) MINUTE;
+    } else if (download_eta >= HOUR) {
+	hours = download_eta / HOUR;
+	mins  = hours / MINUTE;
+	secs  = (int)mins % (int) MINUTE;
+    } else if (download_eta >= MINUTE) {
+	mins = download_eta / MINUTE;
+	secs = (int)download_eta % (int)MINUTE;
+    } else
+	secs = download_eta;
+    // Format output of time
+    char timeleft[32];
+    int cx = 0;
+    if (days && cx >=0 && cx < 32)
+	cx = snprintf(timeleft+cx, sizeof(timeleft), "%dD:", (int)days);
+    if (hours && cx >=0 && cx < 32)
+	cx = snprintf(timeleft+cx, sizeof(timeleft), (hours < 10) ? "0%d:" : "%d:", (int)hours);
+    if (mins && cx >=0 && cx < 32)
+	cx = snprintf(timeleft+cx, sizeof(timeleft), (mins < 10) ? "0%d:" : "%d:", (int)mins);
+    if (!days && !hours && !mins && cx >=0 && cx < 32)  // Keep showing the minutes part
+	snprintf(timeleft+cx, sizeof(timeleft), (secs < 10) ? "00:0%d" : "00:%d", (int)secs);
+    else if (cx >= 0 && cx < 32)
+	snprintf(timeleft+cx, sizeof(timeleft), (secs < 10) ? "0%d" : "%d", (int)secs);
+
+    /* Progress bar */
     int totaldots = 40;
-    double fraction_downloaded = now_downloaded / total_to_download;
     // part of the progress bar that's already full
-    int dots = static_cast<int>(round(fraction_downloaded * totaldots));
+    int dots = (int)(round(fraction_downloaded * totaldots));
 
     // create the meter.
-    // need to use cstdio tools because cout seems to produce
-    // incorrect output?
+    // need to use cstdio tools because cout seems to produce incorrect output?
     int i;
     printf("%3.0f%% [", fraction_downloaded*100);
     for (i=0; i < dots; i++) {
@@ -199,9 +232,9 @@ static int progress_func(void *ptr, double total_to_download, double now_downloa
     if (std::isinf(dlspeed))
 	printf("] %.2f %s / %.2f %s\r", downloaded, ndunit, total_size, dlunit);
     else
-	printf("] %.2f %s / %.2f %s (%.2f %s)\r", downloaded, ndunit, total_size, dlunit, dlspeed, spunit);
+	printf("] %.2f %s / %.2f %s (%.2f %s) [%s left]\r",
+	       downloaded, ndunit, total_size, dlunit, dlspeed, spunit, timeleft);
     fflush(stdout);
-    std::cout.flush();
 
     // Must return 0 otherwise the transfer is aborted
     return 0;

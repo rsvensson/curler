@@ -34,3 +34,8 @@ curler
 
 # Emacs stuff
 .dir-locals.el
+
+# GTAGS
+GPATH
+GTAGS
+GRTAGS
