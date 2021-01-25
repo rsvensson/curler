@@ -14,13 +14,13 @@
 #define GBYTE (double(1024) * MBYTE)
 #define TBYTE (double(1024) * GBYTE)
 
-typedef std::map<const std::string, std::variant<long, char*, std::string>>  HEADERS;
+typedef std::map<const std::string, std::variant<long, std::string>>  HEADERS;
 typedef std::map<const std::string, const std::string> MIMETYPES;
 
-// Function declarations
+// Function prototypes
 static bool file_exists(const std::string &filename);
 static long get_filesize(const std::string &filename);
-static std::size_t write_data(void *ptr, std::size_t size, std::size_t nmemb, FILE *stream);
+static size_t write_data(void *ptr, size_t size, size_t nmemb, FILE *stream);
 static int progress_func(void *ptr, double total_to_download, double now_downloaded,
 			 double total_to_upload, double now_uploaded);
 static size_t header_callback(char *buffer, size_t size, size_t nitems, void *userdata);
@@ -90,7 +90,7 @@ static long get_filesize(const std::string &filename) {
 }
 
 // custom callback function for CURLOPT_WRITEFUNCTION
-static std::size_t write_data(void *ptr, std::size_t size, std::size_t nmemb, FILE *stream) {
+static size_t write_data(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     std::size_t written = fwrite(ptr, size, nmemb, stream);
     return written;
 }
