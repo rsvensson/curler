@@ -105,23 +105,22 @@ static int progress_func(void *ptr, double total_to_download, double now_downloa
 	return 0;
     }
 
-    // For measuring download speed
-    static double old_now_downloaded = 0;
+    /* For measuring download speed */
+    static double current_total = total_to_download;
     static time_t old_seconds = std::time(NULL);
-    double download_since_last = 0;
+    double download_since_last = now_downloaded;
     time_t current_seconds = std::time(NULL);
     time_t seconds_since_last = current_seconds - old_seconds;
-
-    if (old_now_downloaded < now_downloaded) // Make sure we dont get wrong data when file changes
-	download_since_last = now_downloaded - old_now_downloaded;
-    else
-	download_since_last = now_downloaded;
-
-    // Calculate current download speed :
+    // Watch total_to_download to see if the file changes
+    if (current_total != total_to_download) {
+	current_total = total_to_download;
+	old_seconds = std::time(NULL);
+    }
+    // Calculate download speed
     // (now_downloaded - old_now_downloaded) / (current_seconds - old_seconds)
-    double current_dl_speed = download_since_last / (double)seconds_since_last;
+    double current_dl_speed = (download_since_last / (double)seconds_since_last);
 
-    // determine what units we will use
+    /* Determine what units we should use */
     const char *dlunit;
     const char *ndunit;
     const char *spunit;
@@ -179,15 +178,15 @@ static int progress_func(void *ptr, double total_to_download, double now_downloa
 	dlspeed = current_dl_speed;
     }
 
+    /* Progress bar */
     // width of progress bar
     int totaldots = 40;
     double fraction_downloaded = now_downloaded / total_to_download;
     // part of the progress bar that's already full
-    int dots = static_cast<int>(round(fraction_downloaded * totaldots));
+    int dots = (int)(round(fraction_downloaded * totaldots));
 
     // create the meter.
-    // need to use cstdio tools because cout seems to produce
-    // incorrect output?
+    // need to use cstdio tools because cout seems to produce incorrect output?
     int i;
     printf("%3.0f%% [", fraction_downloaded*100);
     for (i=0; i < dots; i++) {
@@ -201,7 +200,6 @@ static int progress_func(void *ptr, double total_to_download, double now_downloa
     else
 	printf("] %.2f %s / %.2f %s (%.2f %s)\r", downloaded, ndunit, total_size, dlunit, dlspeed, spunit);
     fflush(stdout);
-    std::cout.flush();
 
     // Must return 0 otherwise the transfer is aborted
     return 0;
