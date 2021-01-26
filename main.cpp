@@ -94,7 +94,9 @@ URLMAP parse_args(int argc, char *argv[])
 	    if (i+1 < argc)
 		temp_filename = argv[++i];
 
-	    if (temp_url.substr(0, 4).compare("http") == 0) {
+	    if (temp_url.substr(0, 7).compare("http://") == 0
+		|| temp_url.substr(0, 8).compare("https://") == 0
+		|| temp_url.substr(0, 6).compare("ftp://") == 0) {
 		data.url = temp_url;
 		if (temp_filename.length() > 0)
 		    data.filename = temp_filename;

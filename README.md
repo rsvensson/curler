@@ -16,7 +16,7 @@ A simple downloader using libcurl
 ## Usage
 The basic usage is:
 
-    curler -p <path> -u <url> <name>
+    curler <url>
 
 You can specify multiple paths and urls. Every url after a path flag is downloaded into that path. Specifying the filename is optional.
 
