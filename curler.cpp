@@ -403,8 +403,13 @@ bool download(const std::string &path, const std::string &filename, const std::s
     std::string fullpath;
     std::string clean_fname = clean_filename(filename);
 
+#ifdef _WIN32
+    if (path.back() != '\\')
+	fullpath = path + '\\' + clean_fname;
+#else
     if (path.back() != '/')
 	fullpath = path + '/' + clean_fname;
+#endif
     else
 	fullpath = path + clean_fname;
 
