@@ -47,10 +47,10 @@ URLMAP parse_args(int argc, char *argv[])
 {
     URLMAP urls;
     urldata data;
-    std::string path;
-    std::string f = "-f";  // Flag for txt file containing urls
-    std::string p = "-p";  // Flag for path
-    std::string u = "-u";  // Flag for url
+    std::string path = "."; // Setting to . makes it possible to omit the -p flag
+    std::string f = "-f";   // Flag for txt file containing urls
+    std::string p = "-p";   // Flag for path
+    std::string u = "-u";   // Flag for url
 
     for (int i=1; i < argc; i++) {
 	if (p.compare(argv[i]) == 0) {
@@ -86,7 +86,26 @@ URLMAP parse_args(int argc, char *argv[])
 
 	    } else
 		std::cout << "Couldn't open file." << std::endl;
+
+	// No flags passed. Try to parse following args as a url
+	} else {
+	    std::string temp_url = argv[i];
+	    std::string temp_filename;
+	    if (i+1 < argc)
+		temp_filename = argv[++i];
+
+	    if (temp_url.substr(0, 7).compare("http://") == 0
+		|| temp_url.substr(0, 8).compare("https://") == 0
+		|| temp_url.substr(0, 6).compare("ftp://") == 0) {
+		data.url = temp_url;
+		if (temp_filename.length() > 0)
+		    data.filename = temp_filename;
+	    } else {
+		data.url = "";
+		data.filename = "";
+	    }
 	}
+
 	urls[path].push_back(data);
     }
 
