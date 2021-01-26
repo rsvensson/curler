@@ -38,6 +38,6 @@ Of course you can combine files and urls as well
 
 ## Options
 
-    -f <file.txt>     Read
+    -f <file.txt>     Read urls from text file
     -p <path>         Path that you want to download the urls following this flag to
     -u <url> [<name>] URL to download, with optional filename.
