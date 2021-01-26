@@ -273,7 +273,13 @@ static HEADERS get_headers(const std::string &url)
     }
 
     headers["length"] = static_cast<long>(content_length);
-    headers["filetype"] = mimetypes[content_type];
+    if (content_type)
+	headers["filetype"] = mimetypes[content_type];
+    else {  // Didn't find content-type. Try to get extension from the url.
+	std::string ct = url.substr(url.rfind('.'), url.back());
+	if (ct.length() > 0)
+	    headers["filetype"] = ct;
+    }
 
     curl_easy_cleanup(curl);
 
