@@ -405,6 +405,8 @@ bool download(const std::string &path, const std::string &filename, const std::s
 
     if (path.back() != '/')
 	fullpath = path + '/' + clean_fname;
+    else
+	fullpath = path + clean_fname;
 
     // Make sure we have the file ending
     if (fullpath.substr(fullpath.length() - filetype.length()) != filetype)
