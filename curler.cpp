@@ -8,6 +8,7 @@
 #include <map>
 #include <string.h>
 #include <sys/stat.h>
+#include <utime.h>
 #include <variant>
 
 #define KBYTE double(1024)
@@ -298,12 +299,11 @@ static std::string clean_filename(const std::string &filename)
 	{
 	    // It often looks pretty decent to change ':' to " -"
 	    // Like in "Title: Subtitle" -> "Title - Subtitle"
-	    if (filename[i] == ':') {
+	    if (filename[i] == ':')
 		clean_name += " -";
-	    } else {
+	    else
 		// Replace bad character with a space
 		clean_name += ' ';
-	    }
 	}
 	else
 	    clean_name += filename[i];
@@ -313,11 +313,30 @@ static std::string clean_filename(const std::string &filename)
 }
 
 
+static bool set_filetime(const char *filename, time_t filetime)
+{
+    struct stat buffer;
+    struct utimbuf new_time;
+
+    if (stat(filename, &buffer) < 0)
+	return false;
+
+    new_time.actime = buffer.st_atime;
+    new_time.modtime = filetime;
+    if (utime(filename, &new_time) < 0)
+	return false;
+
+    return true;
+}
+
+
 // The actual download function
 static bool do_download(const char *filename, const char *url, curl_off_t resume_point)
 {
     CURL *curl;
+    CURLcode res;
     FILE *fp;
+    time_t filetime;
 
     curl = curl_easy_init();
     if (curl) {
@@ -327,6 +346,7 @@ static bool do_download(const char *filename, const char *url, curl_off_t resume
 	    fp = fopen(filename, "wb");
 	curl_easy_setopt(curl, CURLOPT_URL, url);
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+	curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
 	curl_easy_setopt(curl, CURLOPT_RESUME_FROM_LARGE, resume_point);
 	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
 	curl_easy_setopt(curl, CURLOPT_PROGRESSFUNCTION, progress_func);
@@ -334,9 +354,18 @@ static bool do_download(const char *filename, const char *url, curl_off_t resume
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
 
 	std::cout << "Downloading to " << filename << std::endl;
-	curl_easy_perform(curl);
-	curl_easy_cleanup(curl);
+	res = curl_easy_perform(curl);
 	std::fclose(fp);
+	if (CURLE_OK == res) {
+	    res = curl_easy_getinfo(curl, CURLINFO_FILETIME, &filetime);
+	    printf("\n%s\n", ctime(&filetime));
+	    if ((CURLE_OK == res) && (filetime >= 0)) {
+		if (!set_filetime(filename, filetime))
+		    printf("\nTried but couldn't set file modification time to remote file time.\n");
+	    }
+	}
+
+	curl_easy_cleanup(curl);
 	return true;
     } else
 	return false;
