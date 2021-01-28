@@ -358,7 +358,6 @@ static bool do_download(const char *filename, const char *url, curl_off_t resume
 	std::fclose(fp);
 	if (CURLE_OK == res) {
 	    res = curl_easy_getinfo(curl, CURLINFO_FILETIME, &filetime);
-	    printf("\n%s\n", ctime(&filetime));
 	    if ((CURLE_OK == res) && (filetime >= 0)) {
 		if (!set_filetime(filename, filetime))
 		    printf("\nTried but couldn't set file modification time to remote file time.\n");
