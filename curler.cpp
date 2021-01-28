@@ -32,7 +32,8 @@ static int progress_func(void *ptr, double total_to_download, double now_downloa
 static size_t header_callback(char *buffer, size_t size, size_t nitems, void *userdata);
 static HEADERS get_headers(const std::string &url);
 static std::string clean_filename(const std::string &filename);
-static bool do_download(const char *filename, const char *url, curl_off_t resume_point);
+static bool set_filetime(const char *filename, const time_t filetime);
+static bool do_download(const char *filename, const char *url, const curl_off_t resume_point);
 bool download(const std::string &path, const std::string &url);
 bool download(const std::string &path, const std::string &filename, const std::string &url);
 
@@ -313,7 +314,8 @@ static std::string clean_filename(const std::string &filename)
 }
 
 
-static bool set_filetime(const char *filename, time_t filetime)
+// Sets the file modification time to filetime
+static bool set_filetime(const char *filename, const time_t filetime)
 {
     struct stat buffer;
     struct utimbuf new_time;
@@ -331,7 +333,7 @@ static bool set_filetime(const char *filename, time_t filetime)
 
 
 // The actual download function
-static bool do_download(const char *filename, const char *url, curl_off_t resume_point)
+static bool do_download(const char *filename, const char *url, const curl_off_t resume_point)
 {
     CURL *curl;
     CURLcode res;
