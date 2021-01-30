@@ -23,7 +23,7 @@
 typedef std::map<const std::string, std::variant<long, std::string>>  HEADERS;
 typedef std::map<const std::string, const std::string> MIMETYPES;
 
-// Function prototypes
+/* Function prototypes */
 static bool file_exists(const std::string &filename);
 static long get_filesize(const std::string &filename);
 static size_t write_data(void *ptr, size_t size, size_t nmemb, FILE *stream);
@@ -38,6 +38,7 @@ bool download(const std::string &path, const std::string &url);
 bool download(const std::string &path, const std::string &filename, const std::string &url);
 
 
+/* For getting the extension of files if not specified. */
 static MIMETYPES mimetypes = {
     { "application/pdf",                   ".pdf" },
     { "application/pgp-signature",         ".sig" },
@@ -84,6 +85,7 @@ static MIMETYPES mimetypes = {
     { "video/webm",                        ".webm" }
 };
 
+
 static bool file_exists(const std::string &filename) {
     struct stat buffer;
     return (stat (filename.c_str(), &buffer) == 0);
@@ -96,20 +98,19 @@ static long get_filesize(const std::string &filename) {
     return (rc == 0) ? buffer.st_size : -1;
 }
 
-// custom callback function for CURLOPT_WRITEFUNCTION
+/* custom callback function for CURLOPT_WRITEFUNCTION. */
 static size_t write_data(void *ptr, size_t size, size_t nmemb, FILE *stream) {
-    std::size_t written = fwrite(ptr, size, nmemb, stream);
+    size_t written = fwrite(ptr, size, nmemb, stream);
     return written;
 }
 
-// custom callback function for CURLOPT_PROGRESSFUNCTION to create a progress bar
+/* custom callback function for CURLOPT_PROGRESSFUNCTION to create a progress bar. */
 static int progress_func(void *ptr, double total_to_download, double now_downloaded,
 			 double total_to_upload, double now_uploaded)
 {
-    // Make sure the file is not empty
-    if (total_to_download <= 0.0) {
+    /* Make sure the file is not empty */
+    if (total_to_download <= 0.0)
 	return 0;
-    }
 
     /* For measuring download speed & time remaining */
     static double current_total = total_to_download;
@@ -123,8 +124,7 @@ static int progress_func(void *ptr, double total_to_download, double now_downloa
     time_t transfer_time = start_time - current_time;
     double fraction_downloaded = now_downloaded / total_to_download;
     // Calculate time remaining
-    double transfer_eta = transfer_time / fraction_downloaded;
-    double download_eta = transfer_time - transfer_eta;
+    double download_eta = transfer_time - (transfer_time / fraction_downloaded);
     // Calculate download speed
     double current_dl_speed = (now_downloaded / transfer_time) * -1; // We get negative values back
 
@@ -135,6 +135,8 @@ static int progress_func(void *ptr, double total_to_download, double now_downloa
     double total_size;
     double downloaded;
     double dlspeed;
+
+    // Download size
     if (total_to_download >= TBYTE) {
 	dlunit = "TiB";
 	total_size = total_to_download / TBYTE;
@@ -152,6 +154,7 @@ static int progress_func(void *ptr, double total_to_download, double now_downloa
 	total_size = total_to_download;
     }
 
+    // Downloaded size
     if (now_downloaded >= TBYTE) {
 	ndunit = "TiB";
 	downloaded = now_downloaded / TBYTE;
@@ -169,6 +172,7 @@ static int progress_func(void *ptr, double total_to_download, double now_downloa
 	downloaded = now_downloaded;
     }
 
+    // Speed
     if (current_dl_speed >= TBYTE) {
 	spunit = "TiB/s";
 	dlspeed = current_dl_speed / TBYTE;
@@ -186,7 +190,7 @@ static int progress_func(void *ptr, double total_to_download, double now_downloa
 	dlspeed = current_dl_speed;
     }
 
-    // Time units
+    // Time left
     double days=0, hours=0, mins=0, secs=0;
     if (download_eta >= DAY) {
 	days  = download_eta / DAY;
@@ -221,8 +225,7 @@ static int progress_func(void *ptr, double total_to_download, double now_downloa
     // part of the progress bar that's already full
     int dots = (int)(round(fraction_downloaded * totaldots));
 
-    // create the meter.
-    // need to use cstdio tools because cout seems to produce incorrect output?
+    // create the meter
     int i;
     printf("%3.0f%% [", fraction_downloaded*100);
     for (i=0; i < dots; i++) {
@@ -242,8 +245,11 @@ static int progress_func(void *ptr, double total_to_download, double now_downloa
     return 0;
 }
 
-// Custom callback function for CURLOPT_HEADERFUNCTION to extract header data
-// Currently only used to get the filename if available.
+
+/*
+ * Custom callback function for CURLOPT_HEADERFUNCTION to extract header data.
+ * Currently only used to get the filename if available.
+ */
 static size_t header_callback(char *buffer, size_t size, size_t nitems, void *userdata)
 {
     char *cd = (char *)userdata;
@@ -255,7 +261,7 @@ static size_t header_callback(char *buffer, size_t size, size_t nitems, void *us
 }
 
 
-// Get headers so we can determine size and mimetype of content
+/* Get headers so we can determine size and mimetype of content */
 static HEADERS get_headers(const std::string &url)
 {
     CURL *curl;
@@ -289,7 +295,7 @@ static HEADERS get_headers(const std::string &url)
 }
 
 
-// Remove any illegal characters from filename
+/* Remove any illegal characters from filename */
 static std::string clean_filename(const std::string &filename)
 {
     std::string clean_name;
@@ -298,8 +304,8 @@ static std::string clean_filename(const std::string &filename)
 	if (filename[i] == '/' || filename[i] == '\\' || filename[i] == '*' || filename[i] == '&'
 	    || filename[i] == ':' || filename[i] == '<' || filename[i] == '>')
 	{
-	    // It often looks pretty decent to change ':' to " -"
-	    // Like in "Title: Subtitle" -> "Title - Subtitle"
+	    /* It often looks pretty decent to change ':' to " -"
+	     * Like in "Title: Subtitle" -> "Title - Subtitle" */
 	    if (filename[i] == ':')
 		clean_name += " -";
 	    else
@@ -314,7 +320,7 @@ static std::string clean_filename(const std::string &filename)
 }
 
 
-// Sets the file modification time to filetime
+/* Sets the file modification time to filetime */
 static bool set_filetime(const char *filename, const time_t filetime)
 {
     struct stat buffer;
@@ -332,7 +338,7 @@ static bool set_filetime(const char *filename, const time_t filetime)
 }
 
 
-// The actual download function
+/* The actual download function */
 static bool do_download(const char *filename, const char *url, const curl_off_t resume_point)
 {
     CURL *curl;
@@ -358,6 +364,8 @@ static bool do_download(const char *filename, const char *url, const curl_off_t 
 	std::cout << "Downloading to " << filename << std::endl;
 	res = curl_easy_perform(curl);
 	std::fclose(fp);
+
+	// Try to set file modification time to remote file time
 	if (CURLE_OK == res) {
 	    res = curl_easy_getinfo(curl, CURLINFO_FILETIME, &filetime);
 	    if ((CURLE_OK == res) && (filetime >= 0)) {
@@ -373,7 +381,7 @@ static bool do_download(const char *filename, const char *url, const curl_off_t 
 }
 
 
-// Determine filename, then send to the other download function
+/* Determine filename, then send to the other download function */
 bool download(const std::string &path, const std::string &url)
 {
     CURL *curl;
@@ -429,8 +437,10 @@ bool download(const std::string &path, const std::string &url)
 }
 
 
-// Prepares the filename and checks if we've downloaded the file already.
-// The actual download happens in do_download()
+/*
+ * Prepares the filename and checks if we've downloaded the file already.
+ * The actual download happens in do_download()
+ */
 bool download(const std::string &path, const std::string &filename, const std::string &url)
 {
     HEADERS headers = get_headers(url.c_str());
@@ -439,13 +449,8 @@ bool download(const std::string &path, const std::string &filename, const std::s
     std::string fullpath;
     std::string clean_fname = clean_filename(filename);
 
-#ifdef _WIN32
-    if (path.back() != '\\')
-	fullpath = path + '\\' + clean_fname;
-#else
     if (path.back() != '/')
 	fullpath = path + '/' + clean_fname;
-#endif
     else
 	fullpath = path + clean_fname;
 
