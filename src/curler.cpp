@@ -205,6 +205,12 @@ bool download(const std::string &path, const std::string &url)
  */
 bool download(const std::string &path, const std::string &filename, const std::string &url)
 {
+    /* Check that we have write permissions */
+    if (!is_writeable(path)) {
+	std::cout << "Path is not writeable" << std::endl;
+	return false;
+    }
+
     HEADERS headers = get_headers(url.c_str());
     long content_length = std::get<long>(headers["length"]);
     std::string filetype = std::get<std::string>(headers["filetype"]);

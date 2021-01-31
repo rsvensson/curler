@@ -13,6 +13,13 @@ void create_dir_if_not_exists(const std::string path) {
 	fs::create_directory(path);
 }
 
+bool is_writeable(const std::string path) {
+    fs::perms p = fs::status(path).permissions();
+    if ((p & fs::perms::owner_write) != fs::perms::none)
+	return true;
+    return false;
+}
+
 bool file_exists(const std::string &filename) {
     return fs::exists(filename);
 }
