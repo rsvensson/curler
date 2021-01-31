@@ -1,38 +1,18 @@
 #include "curler.h"
+#include "callbacks.h"
+#include "fileops.h"
 
 #include <curl/curl.h>
-#include <cmath>
-#include <cstdio>
-#include <ctime>
 #include <iostream>
 #include <map>
 #include <string.h>
-#include <sys/stat.h>
-#include <utime.h>
 #include <variant>
 
-#define KBYTE double(1024)
-#define MBYTE (double(1024) * KBYTE)
-#define GBYTE (double(1024) * MBYTE)
-#define TBYTE (double(1024) * GBYTE)
-
-#define MINUTE double(60)
-#define HOUR  (double(60) * MINUTE)
-#define DAY   (double(24) * HOUR)
-
-typedef std::map<const std::string, std::variant<long, std::string>>  HEADERS;
-typedef std::map<const std::string, const std::string> MIMETYPES;
+using HEADERS = std::map<const std::string, std::variant<long, std::string>>;
+using MIMETYPES = std::map<const std::string, const std::string>;
 
 /* Function prototypes */
-static bool file_exists(const std::string &filename);
-static long get_filesize(const std::string &filename);
-static size_t write_data(void *ptr, size_t size, size_t nmemb, FILE *stream);
-static int progress_func(void *ptr, double total_to_download, double now_downloaded,
-			 double total_to_upload, double now_uploaded);
-static size_t header_callback(char *buffer, size_t size, size_t nitems, void *userdata);
 static HEADERS get_headers(const std::string &url);
-static std::string clean_filename(const std::string &filename);
-static bool set_filetime(const char *filename, const time_t filetime);
 static bool do_download(const char *filename, const char *url, const curl_off_t resume_point);
 bool download(const std::string &path, const std::string &url);
 bool download(const std::string &path, const std::string &filename, const std::string &url);
@@ -86,181 +66,6 @@ static MIMETYPES mimetypes = {
 };
 
 
-static bool file_exists(const std::string &filename) {
-    struct stat buffer;
-    return (stat (filename.c_str(), &buffer) == 0);
-}
-
-
-static long get_filesize(const std::string &filename) {
-    struct stat buffer;
-    int rc = stat(filename.c_str(), &buffer);
-    return (rc == 0) ? buffer.st_size : -1;
-}
-
-/* custom callback function for CURLOPT_WRITEFUNCTION. */
-static size_t write_data(void *ptr, size_t size, size_t nmemb, FILE *stream) {
-    size_t written = fwrite(ptr, size, nmemb, stream);
-    return written;
-}
-
-/* custom callback function for CURLOPT_PROGRESSFUNCTION to create a progress bar. */
-static int progress_func(void *ptr, double total_to_download, double now_downloaded,
-			 double total_to_upload, double now_uploaded)
-{
-    /* Make sure the file is not empty */
-    if (total_to_download <= 0.0)
-	return 0;
-
-    /* For measuring download speed & time remaining */
-    static double current_total = total_to_download;
-    static time_t start_time = std::time(NULL);
-    // Watch total_to_download to see if the file changes
-    if (current_total != total_to_download) {
-	current_total = total_to_download;
-	start_time = std::time(NULL);
-    }
-    time_t current_time = std::time(NULL);
-    time_t transfer_time = start_time - current_time;
-    double fraction_downloaded = now_downloaded / total_to_download;
-    // Calculate time remaining
-    double download_eta = transfer_time - (transfer_time / fraction_downloaded);
-    // Calculate download speed
-    double current_dl_speed = (now_downloaded / transfer_time) * -1; // We get negative values back
-
-    /* Determine what units we should use */
-    const char *dlunit;
-    const char *ndunit;
-    const char *spunit;
-    double total_size;
-    double downloaded;
-    double dlspeed;
-
-    // Download size
-    if (total_to_download >= TBYTE) {
-	dlunit = "TiB";
-	total_size = total_to_download / TBYTE;
-    } else if (total_to_download >= GBYTE) {
-	dlunit = "GiB";
-	total_size = total_to_download / GBYTE;
-    } else if (total_to_download >= MBYTE) {
-	dlunit = "MiB";
-	total_size = total_to_download / MBYTE;
-    } else if (total_to_download >= KBYTE) {
-	dlunit = "KiB";
-	total_size = total_to_download / KBYTE;
-    } else {
-	dlunit = "B";
-	total_size = total_to_download;
-    }
-
-    // Downloaded size
-    if (now_downloaded >= TBYTE) {
-	ndunit = "TiB";
-	downloaded = now_downloaded / TBYTE;
-    } else if (now_downloaded >= GBYTE) {
-	ndunit = "GiB";
-	downloaded = now_downloaded / GBYTE;
-    } else if (now_downloaded >= MBYTE) {
-	ndunit = "MiB";
-	downloaded = now_downloaded / MBYTE;
-    } else if (now_downloaded >= KBYTE) {
-	ndunit = "KiB";
-	downloaded = now_downloaded / KBYTE;
-    } else {
-	ndunit = "B";
-	downloaded = now_downloaded;
-    }
-
-    // Speed
-    if (current_dl_speed >= TBYTE) {
-	spunit = "TiB/s";
-	dlspeed = current_dl_speed / TBYTE;
-    } else if (current_dl_speed >= GBYTE) {
-	spunit = "GiB/s";
-	dlspeed = current_dl_speed / GBYTE;
-    } else if (current_dl_speed >= MBYTE) {
-	spunit = "MiB/s";
-	dlspeed = current_dl_speed / MBYTE;
-    } else if (current_dl_speed >= KBYTE) {
-	spunit = "KiB/s";
-	dlspeed = current_dl_speed / KBYTE;
-    } else {
-	spunit = "B/s";
-	dlspeed = current_dl_speed;
-    }
-
-    // Time left
-    double days=0, hours=0, mins=0, secs=0;
-    if (download_eta >= DAY) {
-	days  = download_eta / DAY;
-	hours = days / HOUR;
-	mins  = hours / MINUTE;
-	secs  = (int)mins % (int) MINUTE;
-    } else if (download_eta >= HOUR) {
-	hours = download_eta / HOUR;
-	mins  = hours / MINUTE;
-	secs  = (int)mins % (int) MINUTE;
-    } else if (download_eta >= MINUTE) {
-	mins = download_eta / MINUTE;
-	secs = (int)download_eta % (int)MINUTE;
-    } else
-	secs = download_eta;
-    // Format output of time
-    char timeleft[32];
-    int cx = 0;
-    if (days && cx >=0 && cx < 32)
-	cx = snprintf(timeleft+cx, sizeof(timeleft), "%dD:", (int)days);
-    if (hours && cx >=0 && cx < 32)
-	cx = snprintf(timeleft+cx, sizeof(timeleft), (hours < 10) ? "0%d:" : "%d:", (int)hours);
-    if (mins && cx >=0 && cx < 32)
-	cx = snprintf(timeleft+cx, sizeof(timeleft), (mins < 10) ? "0%d:" : "%d:", (int)mins);
-    if (!days && !hours && !mins && cx >=0 && cx < 32)  // Keep showing the minutes part
-	snprintf(timeleft+cx, sizeof(timeleft), (secs < 10) ? "00:0%d" : "00:%d", (int)secs);
-    else if (cx >= 0 && cx < 32)
-	snprintf(timeleft+cx, sizeof(timeleft), (secs < 10) ? "0%d" : "%d", (int)secs);
-
-    /* Progress bar */
-    int totaldots = 40;
-    // part of the progress bar that's already full
-    int dots = (int)(round(fraction_downloaded * totaldots));
-
-    // create the meter
-    int i;
-    printf("%3.0f%% [", fraction_downloaded*100);
-    for (i=0; i < dots; i++) {
-	printf("=");
-    }
-    for (; i < totaldots; i++) {
-	printf(" ");
-    }
-    if (std::isinf(dlspeed))
-	printf("] %.2f %s / %.2f %s\r", downloaded, ndunit, total_size, dlunit);
-    else
-	printf("] %.2f %s / %.2f %s (%.2f %s) [%s left]\r",
-	       downloaded, ndunit, total_size, dlunit, dlspeed, spunit, timeleft);
-    fflush(stdout);
-
-    // Must return 0 otherwise the transfer is aborted
-    return 0;
-}
-
-
-/*
- * Custom callback function for CURLOPT_HEADERFUNCTION to extract header data.
- * Currently only used to get the filename if available.
- */
-static size_t header_callback(char *buffer, size_t size, size_t nitems, void *userdata)
-{
-    char *cd = (char *)userdata;
-
-    // TODO: this leaves a trailing " character for some reason even though it's escaped
-    sscanf(buffer, "content-disposition: %*s %*s filename=\"%s\"", cd);
-
-    return nitems * size;
-}
-
-
 /* Get headers so we can determine size and mimetype of content */
 static HEADERS get_headers(const std::string &url)
 {
@@ -295,49 +100,6 @@ static HEADERS get_headers(const std::string &url)
 }
 
 
-/* Remove any illegal characters from filename */
-static std::string clean_filename(const std::string &filename)
-{
-    std::string clean_name;
-
-    for (size_t i=0; i < filename.length(); i++) {
-	if (filename[i] == '/' || filename[i] == '\\' || filename[i] == '*' || filename[i] == '&'
-	    || filename[i] == ':' || filename[i] == '<' || filename[i] == '>')
-	{
-	    /* It often looks pretty decent to change ':' to " -"
-	     * Like in "Title: Subtitle" -> "Title - Subtitle" */
-	    if (filename[i] == ':')
-		clean_name += " -";
-	    else
-		// Replace bad character with a space
-		clean_name += ' ';
-	}
-	else
-	    clean_name += filename[i];
-    }
-
-    return clean_name;
-}
-
-
-/* Sets the file modification time to filetime */
-static bool set_filetime(const char *filename, const time_t filetime)
-{
-    struct stat buffer;
-    struct utimbuf new_time;
-
-    if (stat(filename, &buffer) < 0)
-	return false;
-
-    new_time.actime = buffer.st_atime;
-    new_time.modtime = filetime;
-    if (utime(filename, &new_time) < 0)
-	return false;
-
-    return true;
-}
-
-
 /* The actual download function */
 static bool do_download(const char *filename, const char *url, const curl_off_t resume_point)
 {
@@ -357,8 +119,8 @@ static bool do_download(const char *filename, const char *url, const curl_off_t 
 	curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
 	curl_easy_setopt(curl, CURLOPT_RESUME_FROM_LARGE, resume_point);
 	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
-	curl_easy_setopt(curl, CURLOPT_PROGRESSFUNCTION, progress_func);
-	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_data);
+	curl_easy_setopt(curl, CURLOPT_PROGRESSFUNCTION, progress_callback);
+	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
 
 	std::cout << "Downloading to " << filename << std::endl;
