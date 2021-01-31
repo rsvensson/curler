@@ -1,5 +1,18 @@
 #include "callbacks.h"
 
+#include <cmath>
+#include <cstdio>
+#include <ctime>
+
+#define KBYTE  double(1024)
+#define MBYTE (double(1024) * KBYTE)
+#define GBYTE (double(1024) * MBYTE)
+#define TBYTE (double(1024) * GBYTE)
+
+#define MINUTE double(60)
+#define HOUR  (double(60) * MINUTE)
+#define DAY   (double(24) * HOUR)
+
 /* custom callback function for CURLOPT_WRITEFUNCTION. */
 size_t write_callback(void *ptr, size_t size, size_t nmemb, FILE *stream) {
     size_t written = fwrite(ptr, size, nmemb, stream);

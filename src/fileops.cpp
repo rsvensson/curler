@@ -1,5 +1,15 @@
 #include "fileops.h"
 
+#include <ctime>
+#include <filesystem>
+#include <string>
+#include <sys/stat.h>
+#include <utime.h>
+
+void create_dir_if_not_exists(const std::string path) {
+    if (!std::filesystem::is_directory(path) || std::filesystem::exists(path))
+	std::filesystem::create_directory(path);
+}
 
 bool file_exists(const std::string &filename) {
     struct stat buffer;

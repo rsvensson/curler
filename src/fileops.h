@@ -2,8 +2,6 @@
 #define FILEOPS_H
 
 #include <string>
-#include <sys/stat.h>
-#include <utime.h>
 
 bool file_exists(const std::string &filename);
 long get_filesize(const std::string &filename);
