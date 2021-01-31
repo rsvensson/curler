@@ -3,6 +3,7 @@
 
 #include <string>
 
+void create_dir_if_not_exists(const std::string path);
 bool file_exists(const std::string &filename);
 long get_filesize(const std::string &filename);
 /* Sets the file modification time to filetime */

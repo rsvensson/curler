@@ -6,21 +6,20 @@
 #include <sys/stat.h>
 #include <utime.h>
 
+namespace fs = std::filesystem;
+
 void create_dir_if_not_exists(const std::string path) {
-    if (!std::filesystem::is_directory(path) || std::filesystem::exists(path))
-	std::filesystem::create_directory(path);
+    if (!fs::is_directory(path) || !fs::exists(path))
+	fs::create_directory(path);
 }
 
 bool file_exists(const std::string &filename) {
-    struct stat buffer;
-    return (stat (filename.c_str(), &buffer) == 0);
+    return fs::exists(filename);
 }
 
 
 long get_filesize(const std::string &filename) {
-    struct stat buffer;
-    int rc = stat(filename.c_str(), &buffer);
-    return (rc == 0) ? buffer.st_size : -1;
+    return fs::file_size(filename);
 }
 
 
