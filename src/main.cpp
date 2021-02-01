@@ -35,7 +35,7 @@ int main(int argc, char *argv[])
 	return 0;
 
     } else {
-	std::cout << "Usage: " << argv[0] << " -p <path> -u <url> <filename>" << std::endl;
+	std::cout << "Usage: " << argv[0] << " [-p <path>] [-u] <url> [filename]" << std::endl;
 	return -1;
     }
 }
