@@ -1,8 +1,8 @@
 #include "callbacks.h"
 
-#include <cmath>
-#include <cstdio>
-#include <ctime>
+#include <math.h>
+#include <stdio.h>
+#include <time.h>
 
 #define KBYTE  double(1024)
 #define MBYTE (double(1024) * KBYTE)
