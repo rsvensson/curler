@@ -45,13 +45,13 @@ int progress_callback(void *ptr, double total_to_download, double now_downloaded
 
     /* For measuring download speed & time remaining */
     static double current_total = total_to_download;
-    static time_t start_time = std::time(NULL);
+    static time_t start_time = time(NULL);
     // Watch total_to_download to see if the file changes
     if (current_total != total_to_download) {
 	current_total = total_to_download;
-	start_time = std::time(NULL);
+	start_time = time(NULL);
     }
-    time_t current_time = std::time(NULL);
+    time_t current_time = time(NULL);
     time_t transfer_time = start_time - current_time;
     double fraction_downloaded = now_downloaded / total_to_download;
     // Calculate time remaining
