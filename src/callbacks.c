@@ -165,7 +165,7 @@ int progress_callback(void *ptr, double total_to_download, double now_downloaded
     for (; i < totaldots; i++) {
 	printf(" ");
     }
-    if (std::isinf(dlspeed))
+    if (isinf(dlspeed) || isinf(download_eta))
 	printf("] %.2f %s / %.2f %s\r", downloaded, ndunit, total_size, dlunit);
     else
 	printf("] %.2f %s / %.2f %s (%.2f %s) [%s left]\r",
