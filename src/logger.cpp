@@ -18,7 +18,8 @@ std::string info[] = {
     "Skipping already downloaded file:",
     "Resuming download at byte",
     "Downloading to",
-    "Done"
+    "Done",
+    "DEBUG:"
 };
 
 

@@ -19,7 +19,8 @@ enum {
     FILE_INFO_SKIP,
     FILE_INFO_RESUME,
     FILE_INFO_DOWNLOAD,
-    FILE_INFO_DONE
+    FILE_INFO_DONE,
+    DEBUG_INFO_OUT
 };
 
 extern std::string err[];
