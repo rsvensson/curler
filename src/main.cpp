@@ -73,8 +73,8 @@ URLMAP parse_args(int argc, char *argv[])
 		while (std::getline(fd, line)) {
 		    space = line.find(' ');
 		    if (space != std::string::npos) {
-			data.url = line.substr(0, space - 1);
-			data.filename = line.substr(space + 1, line.back());
+			data.url = line.substr(0, space);
+			data.filename = line.substr(space + 1);
 		    } else {
 			data.url = line;
 			data.filename = "";
