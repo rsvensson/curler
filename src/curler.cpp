@@ -1,9 +1,9 @@
 #include "curler.h"
 #include "callbacks.h"
 #include "fileops.h"
+#include "logger.h"
 
 #include <curl/curl.h>
-#include <iostream>
 #include <map>
 #include <string.h>
 #include <variant>
@@ -123,7 +123,7 @@ static bool do_download(const char *filename, const char *url, const curl_off_t 
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
 
-	std::cout << "Downloading to " << filename << std::endl;
+	log(info[FILE_INFO_DOWNLOAD], filename);
 	res = curl_easy_perform(curl);
 	std::fclose(fp);
 
@@ -132,7 +132,8 @@ static bool do_download(const char *filename, const char *url, const curl_off_t 
 	    res = curl_easy_getinfo(curl, CURLINFO_FILETIME, &filetime);
 	    if ((CURLE_OK == res) && (filetime >= 0)) {
 		if (!set_filetime(filename, filetime))
-		    printf("\nTried but couldn't set file modification time to remote file time.\n");
+		    log(warn[FILE_WARN_FILETIME]);
+		    //printf("\nTried but couldn't set file modification time to remote file time.\n");
 	    }
 	}
 
@@ -183,7 +184,7 @@ bool download(const std::string &path, const std::string &url)
 	    }
 	    // Last resort
 	    else {
-		std::cout << "Couldn't determine filename." << std::endl;
+		log(warn[FILE_WARN_FILENAME]);
 		std::string name = "file";
 		int number = 1;
 		do {
@@ -207,7 +208,7 @@ bool download(const std::string &path, const std::string &filename, const std::s
 {
     /* Check that we have write permissions */
     if (!is_writeable(path)) {
-	std::cout << "Path is not writeable" << std::endl;
+	log(err[FILE_ERR_PERMS]);
 	return false;
     }
 
@@ -232,12 +233,12 @@ bool download(const std::string &path, const std::string &filename, const std::s
     if (is_downloaded) {
 	long filesize = get_filesize(fullpath);
 	if (content_length == filesize) {
-	    std::cout << "File '" << clean_fname << "' already downloaded. Skipping." << std::endl;
+	    log(info[FILE_INFO_SKIP], clean_fname);
 	    return true;
 	}
 
-	std::cout << "Found incomplete file at '" << fullpath << "'." << std::endl;
-	std::cout << "Resuming at " << filesize << "." << std::endl;
+	log(info[FILE_INFO_EXISTS], fullpath);
+	log(info[FILE_INFO_RESUME], filesize);
 	if (is_ftp)  // For ftp it's recommended to resume from -1
 	    return do_download(fullpath.c_str(), url.c_str(), -1);
 	else
