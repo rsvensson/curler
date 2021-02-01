@@ -141,15 +141,15 @@ int progress_callback(void *ptr, double total_to_download, double now_downloaded
     char timeleft[32];
     int cx = 0;
     if (days && cx >=0 && cx < 32)
-	cx = snprintf(timeleft+cx, sizeof(timeleft), "%dD:", (int)days);
+	cx = snprintf(timeleft+cx, sizeof(timeleft), "%.0fD:", days);
     if (hours && cx >=0 && cx < 32)
-	cx = snprintf(timeleft+cx, sizeof(timeleft), (hours < 10) ? "0%d:" : "%d:", (int)hours);
+	cx = snprintf(timeleft+cx, sizeof(timeleft), (hours < 10) ? "0%1.0f:" : "%2.0f:", hours);
     if (mins && cx >=0 && cx < 32)
-	cx = snprintf(timeleft+cx, sizeof(timeleft), (mins < 10) ? "0%d:" : "%d:", (int)mins);
+	cx = snprintf(timeleft+cx, sizeof(timeleft), (mins < 10) ? "0%1.0f:" : "%2.0f:", mins);
     if (!days && !hours && !mins && cx >=0 && cx < 32)  // Keep showing the minutes part
-	snprintf(timeleft+cx, sizeof(timeleft), (secs < 10) ? "00:0%d" : "00:%d", (int)secs);
+	snprintf(timeleft+cx, sizeof(timeleft), (secs < 10) ? "00:0%1.0f" : "00:%2.0f", secs);
     else if (cx >= 0 && cx < 32)
-	snprintf(timeleft+cx, sizeof(timeleft), (secs < 10) ? "0%d" : "%d", (int)secs);
+	snprintf(timeleft+cx, sizeof(timeleft), (secs < 10) ? "0%1.0f" : "%2.0f", secs);
 
     /* Progress bar */
     int totaldots = 40;
@@ -157,6 +157,7 @@ int progress_callback(void *ptr, double total_to_download, double now_downloaded
     int dots = (int)(round(fraction_downloaded * totaldots));
 
     // create the meter
+    printf("%c[2K", 27);  // Clears the previously written line
     int i;
     printf("%3.0f%% [", fraction_downloaded*100);
     for (i=0; i < dots; i++) {
@@ -165,7 +166,7 @@ int progress_callback(void *ptr, double total_to_download, double now_downloaded
     for (; i < totaldots; i++) {
 	printf(" ");
     }
-    if (isinf(dlspeed) || isinf(download_eta))
+    if (isinf(dlspeed) || isinf(download_eta) || isnan(secs) || secs < 0)
 	printf("] %.2f %s / %.2f %s\r", downloaded, ndunit, total_size, dlunit);
     else
 	printf("] %.2f %s / %.2f %s (%.2f %s) [%s left]\r",
