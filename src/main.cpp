@@ -13,7 +13,7 @@ struct urldata
     std::string filename;
 };
 
-typedef std::map<std::string, std::vector<urldata> > URLMAP;
+using URLMAP = std::map<std::string, std::vector<urldata>>;
 
 URLMAP parse_args(int argc, char *argv[]);
 
