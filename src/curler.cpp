@@ -227,10 +227,7 @@ bool download(const std::string &path, const std::string &filename, const std::s
     if (fullpath.substr(fullpath.length() - filetype.length()) != filetype)
 	fullpath.append(filetype);
 
-    bool is_ftp = (url.substr(0, 6).compare("ftp://") == 0);
-    bool is_downloaded = file_exists(fullpath);
-
-    if (is_downloaded) {
+    if (file_exists(fullpath)) {
 	long filesize = get_filesize(fullpath);
 	if (content_length == filesize) {
 	    log(info[FILE_INFO_SKIP], clean_fname);
@@ -239,10 +236,7 @@ bool download(const std::string &path, const std::string &filename, const std::s
 
 	log(info[FILE_INFO_EXISTS], fullpath);
 	log(info[FILE_INFO_RESUME], filesize);
-	if (is_ftp)  // For ftp it's recommended to resume from -1
-	    return do_download(fullpath.c_str(), url.c_str(), -1);
-	else
-	    return do_download(fullpath.c_str(), url.c_str(), filesize);
+	return do_download(fullpath.c_str(), url.c_str(), filesize);
     } else {
 	create_dir_if_not_exists(path);
 	return do_download(fullpath.c_str(), url.c_str(), 0);
