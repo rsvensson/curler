@@ -2,7 +2,11 @@
 #include <iostream>
 #include <string>
 
-std::string err[] = {"Path is not writeable"};
+std::string err[] = {
+    "Path is not writeable",
+    "Couldn't download file",
+    "Couldn't open"
+};
 
 std::string warn[] = {
     "Tried but couldn't set file modification time to remote file time",
@@ -13,7 +17,8 @@ std::string info[] = {
     "Found incomplete file at",
     "Skipping already downloaded file:",
     "Resuming download at byte",
-    "Downloading to"
+    "Downloading to",
+    "Done"
 };
 
 
@@ -22,7 +27,7 @@ void log(std::string msg) {
 }
 
 void log(std::string msg, std::string ext) {
-    std::cout << msg << " " << ext << "." << std::endl;
+    std::cout << msg << " \"" << ext << "\"." << std::endl;
 }
 
 void log(std::string msg, long ext) {

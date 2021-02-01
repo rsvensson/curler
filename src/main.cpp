@@ -1,4 +1,6 @@
 #include "curler.h"
+#include "logger.h"
+
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -19,21 +21,16 @@ int main(int argc, char *argv[])
 {
     if (argc > 1) {
 	URLMAP urls = parse_args(argc, argv);
+	bool res = false;
 
 	for (const auto &path :urls) {
-	    for (const auto &url: path.second)
-		if (url.filename.length() == 0) {
-		    if (!download(path.first, url.url))
-			std::cout << "Couldn't get file. Skipping." << std::endl;
-		    else
-			std::cout << "Done\n" << std::endl;
-
-		} else {
-		    if (!download(path.first, url.filename, url.url))
-			std::cout << "Couldn't get '" << url.filename << "'. Skipping." << std::endl;
-		    else
-			std::cout << "Done\n" << std::endl;
-		}
+	    for (const auto &url: path.second) {
+		if (url.filename.length() == 0)
+		    res = download(path.first, url.url);
+		else
+		    res = download(path.first, url.filename, url.url);
+	    }
+	    log((res) ? info[FILE_INFO_DONE] : err[FILE_ERR_DOWNLOAD]);
 	}
 	return 0;
 
@@ -84,8 +81,10 @@ URLMAP parse_args(int argc, char *argv[])
 		    }
 		}
 
-	    } else
-		std::cout << "Couldn't open file." << std::endl;
+	    } else {
+		log(err[URL_ERR_TEXTFILE], argv[i]);
+		exit(-1);
+	    }
 
 	// No flags passed. Try to parse following args as a url
 	} else {
