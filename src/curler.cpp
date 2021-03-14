@@ -101,7 +101,7 @@ static HEADERS get_headers(const std::string &url)
 
 
 /* The actual download function */
-static bool do_download(const char *filename, const char *url, const curl_off_t resume_point)
+static bool do_download(const char *filename, const char *url, const curl_off_t resume_point = 0)
 {
     CURL *curl;
     CURLcode res;
@@ -239,6 +239,6 @@ bool download(const std::string &path, const std::string &filename, const std::s
 	return do_download(fullpath.c_str(), url.c_str(), filesize);
     } else {
 	create_dir_if_not_exists(path);
-	return do_download(fullpath.c_str(), url.c_str(), 0);
+	return do_download(fullpath.c_str(), url.c_str());
     }
 }
