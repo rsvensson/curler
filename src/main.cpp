@@ -79,7 +79,9 @@ URLMAP parse_args(int argc, char *argv[])
 			data.url = line;
 			data.filename = "";
 		    }
+		    urls[path].push_back(data);
 		}
+		continue;
 
 	    } else {
 		log(err[URL_ERR_TEXTFILE], argv[i]);
