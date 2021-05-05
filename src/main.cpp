@@ -3,7 +3,6 @@
 
 #include <fstream>
 #include <iostream>
-#include <map>
 #include <string>
 #include <vector>
 
@@ -11,27 +10,25 @@ struct urldata
 {
     std::string url;
     std::string filename;
+    std::string path;
 };
 
-using URLMAP = std::map<std::string, std::vector<urldata>>;
-
-URLMAP parse_args(int argc, char *argv[]);
+std::vector<urldata> parse_args(int argc, char *argv[]);
 
 int main(int argc, char *argv[])
 {
     if (argc > 1) {
-	URLMAP urls = parse_args(argc, argv);
+	std::vector<urldata> urls = parse_args(argc, argv);
 	bool res = false;
 
-	for (const auto &path :urls) {
-	    for (const auto &url: path.second) {
-		if (url.filename.length() == 0)
-		    res = download(path.first, url.url);
-		else
-		    res = download(path.first, url.filename, url.url);
-	    }
-	    log((res) ? info[FILE_INFO_DONE] : err[FILE_ERR_DOWNLOAD]);
+	for (urldata &url : urls) {
+	    if (url.filename.length() == 0)
+		res = download(url.path, url.url);
+	    else
+		res = download(url.path, url.filename, url.url);
 	}
+	log((res) ? info[FILE_INFO_DONE] : err[FILE_ERR_DOWNLOAD]);
+
 	return 0;
 
     } else {
@@ -40,9 +37,9 @@ int main(int argc, char *argv[])
     }
 }
 
-URLMAP parse_args(int argc, char *argv[])
+std::vector<urldata> parse_args(int argc, char *argv[])
 {
-    URLMAP urls;
+    std::vector<urldata> urls;
     urldata data;
     std::string path = "."; // Setting to . makes it possible to omit the -p flag
     std::string f = "-f";   // Flag for txt file containing urls
@@ -57,6 +54,7 @@ URLMAP parse_args(int argc, char *argv[])
 	// Parse the urls, and handle having no filename
 	} else if (u.compare(argv[i]) == 0) {
 	    data.url = argv[++i];
+	    data.path = path;
 	    if (i+1 < argc && u.compare(argv[i+1]) && p.compare(argv[i+1]))
 		data.filename = argv[++i];
 	    else
@@ -71,15 +69,18 @@ URLMAP parse_args(int argc, char *argv[])
 		std::string line;
 		size_t space;
 		while (std::getline(fd, line)) {
-		    space = line.find(' ');
-		    if (space != std::string::npos) {
-			data.url = line.substr(0, space);
-			data.filename = line.substr(space + 1);
-		    } else {
-			data.url = line;
-			data.filename = "";
+		    if (!(line.empty() or line.at(0) == ' ')) {
+			space = line.find(' ');
+			if (space != std::string::npos) {
+			    data.url = line.substr(0, space);
+			    data.filename = line.substr(space + 1);
+			} else {
+			    data.url = line;
+			    data.filename = "";
+			}
+			data.path = path;
+			urls.push_back(data);
 		    }
-		    urls[path].push_back(data);
 		}
 		continue;
 
@@ -105,9 +106,10 @@ URLMAP parse_args(int argc, char *argv[])
 		data.url = "";
 		data.filename = "";
 	    }
+	    data.path = path;
 	}
 
-	urls[path].push_back(data);
+	urls.push_back(data);
     }
 
     return urls;
