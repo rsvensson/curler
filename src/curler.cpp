@@ -240,16 +240,16 @@ bool download(const std::string &path, const std::string &filename, const std::s
 	long local_filesize = get_filesize(fullpath);
 
 	if (filetime > 0 && filetime == local_filetime) {
-	    log(info[FILE_INFO_SKIP], clean_fname);
+	    log(info[FILE_INFO_SKIP], clean_fname + filetype);
 	    return true;
 	} else if (filetime <= 0 && filesize == local_filesize) {
-	    log(info[FILE_INFO_SKIP], clean_fname);
+	    log(info[FILE_INFO_SKIP], clean_fname + filetype);
 	    return true;
 	}
 
 	log(info[FILE_INFO_EXISTS], fullpath);
 	log(info[FILE_INFO_RESUME], filesize);
-	return do_download(fullpath.c_str(), url.c_str(), filesize);
+	return do_download(fullpath.c_str(), url.c_str(), local_filesize);
     } else {
 	create_dir_if_not_exists(path);
 	return do_download(fullpath.c_str(), url.c_str());
