@@ -248,7 +248,7 @@ bool download(const std::string &path, const std::string &filename, const std::s
 	}
 
 	log(info[FILE_INFO_EXISTS], fullpath);
-	log(info[FILE_INFO_RESUME], filesize);
+	log(info[FILE_INFO_RESUME], local_filesize);
 	return do_download(fullpath.c_str(), url.c_str(), local_filesize);
     } else {
 	create_dir_if_not_exists(path);
