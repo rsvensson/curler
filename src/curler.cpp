@@ -6,7 +6,6 @@
 #include <curl/curl.h>
 #include <map>
 #include <string.h>
-#include <iostream>
 
 using MIMETYPES = std::map<const std::string, const std::string>;
 using HEADERS = struct { long length; time_t file_time; std::string file_type; };
