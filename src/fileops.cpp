@@ -48,6 +48,19 @@ bool set_filetime(const char *filename, const time_t filetime)
 }
 
 
+/* Gets the file modification time from filename */
+time_t get_filetime(const char *filename)
+{
+    struct stat buffer;
+    time_t filetime = 0;
+
+    if (stat(filename, &buffer) == 0)
+	filetime = buffer.st_mtime;
+
+    return filetime;
+}
+
+
 /* Remove any illegal characters from filename */
 std::string clean_filename(const std::string &filename)
 {

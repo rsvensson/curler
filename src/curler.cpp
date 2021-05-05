@@ -6,9 +6,10 @@
 #include <curl/curl.h>
 #include <map>
 #include <string.h>
+#include <iostream>
 
 using MIMETYPES = std::map<const std::string, const std::string>;
-using HEADERS = struct { long length; std::string file_type; };
+using HEADERS = struct { long length; time_t file_time; std::string file_type; };
 
 /* Function prototypes */
 static HEADERS get_headers(const std::string &url);
@@ -69,23 +70,26 @@ static MIMETYPES mimetypes = {
 static HEADERS get_headers(const std::string &url)
 {
     CURL *curl;
+    HEADERS headers;
     double content_length = 0.0;
     char *content_type = nullptr;
-    time_t filetime;
-    HEADERS headers;
+    time_t filetime = 0;
 
     curl = curl_easy_init();
     if (curl) {
 	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 	curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+	curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
 	curl_easy_perform(curl);
 	curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &content_length);
-	curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &content_type);
 	curl_easy_getinfo(curl, CURLINFO_FILETIME, &filetime);
+	curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &content_type);
     }
+    curl_easy_cleanup(curl);
 
     headers.length = static_cast<long>(content_length);
+    headers.file_time = filetime;
     if (content_type)
 	headers.file_type = mimetypes[content_type];
     else {  // Didn't find content-type. Try to get extension from the url.
@@ -97,8 +101,6 @@ static HEADERS get_headers(const std::string &url)
 	    headers.file_type = ".bin";
 	}
     }
-
-    curl_easy_cleanup(curl);
 
     return headers;
 }
@@ -184,7 +186,7 @@ bool download(const std::string &path, const std::string &url)
 		filename = url.substr(s+1, url.length() - s);
 		size_t p = filename.rfind(php, filename.length());
 		if (p != std::string::npos)
-		    filename = filename.substr(0, p-1);
+		    filename = filename.substr(0, p);
 	    }
 	    // Last resort
 	    else {
@@ -217,7 +219,8 @@ bool download(const std::string &path, const std::string &filename, const std::s
     }
 
     HEADERS headers = get_headers(url.c_str());
-    long content_length = headers.length;
+    long filesize = headers.length;
+    time_t filetime = headers.file_time;
     std::string filetype = headers.file_type;
     std::string fullpath;
     std::string clean_fname = clean_filename(filename);
@@ -232,8 +235,14 @@ bool download(const std::string &path, const std::string &filename, const std::s
 	fullpath.append(filetype);
 
     if (file_exists(fullpath)) {
-	long filesize = get_filesize(fullpath);
-	if (content_length == filesize) {
+	// Compare modification time, and fall back on filesize
+	time_t local_filetime = get_filetime(fullpath.c_str());
+	long local_filesize = get_filesize(fullpath);
+
+	if (filetime > 0 && filetime == local_filetime) {
+	    log(info[FILE_INFO_SKIP], clean_fname);
+	    return true;
+	} else if (filetime <= 0 && filesize == local_filesize) {
 	    log(info[FILE_INFO_SKIP], clean_fname);
 	    return true;
 	}
