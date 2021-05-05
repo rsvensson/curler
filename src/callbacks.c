@@ -9,9 +9,9 @@
 #define GBYTE (double(1024) * MBYTE)
 #define TBYTE (double(1024) * GBYTE)
 
-#define MINUTE double(60)
-#define HOUR  (double(60) * MINUTE)
-#define DAY   (double(24) * HOUR)
+#define MINUTE 60
+#define HOUR  (60 * MINUTE)
+#define DAY   (24 * HOUR)
 
 /* custom callback function for CURLOPT_WRITEFUNCTION. */
 size_t write_callback(void *ptr, size_t size, size_t nmemb, FILE *stream) {
@@ -122,34 +122,33 @@ int progress_callback(void *ptr, double total_to_download, double now_downloaded
     }
 
     // Time left
-    double days=0, hours=0, mins=0, secs=0;
-    if (download_eta >= DAY) {
-	days  = download_eta / DAY;
-	hours = days / HOUR;
-	mins  = hours / MINUTE;
-	secs  = (int)mins % (int) MINUTE;
-    } else if (download_eta >= HOUR) {
-	hours = download_eta / HOUR;
-	mins  = hours / MINUTE;
-	secs  = (int)mins % (int) MINUTE;
-    } else if (download_eta >= MINUTE) {
-	mins = download_eta / MINUTE;
-	secs = (int)download_eta % (int)MINUTE;
-    } else
-	secs = download_eta;
-    // Format output of time
+    int secs=0, mins=0, hours=0, days=0;
+    int n = (int)download_eta;
+    if (n >= DAY) {
+	days = n / DAY;
+	n = n % DAY;
+    }
+    if (n >= HOUR) {
+	hours = n / HOUR;
+	n = n % HOUR;
+    }
+    if (n >= MINUTE) {
+	mins = n / MINUTE;
+	n = n % MINUTE;
+    }
+    secs = n;
     char timeleft[32];
     int cx = 0;
     if (days && cx >=0 && cx < 32)
-	cx = snprintf(timeleft+cx, sizeof(timeleft), "%.0fD:", days);
+	cx = snprintf(timeleft+cx, sizeof(timeleft), "%dD:", days);
     if (hours && cx >=0 && cx < 32)
-	cx = snprintf(timeleft+cx, sizeof(timeleft), (hours < 10) ? "0%1.0f:" : "%2.0f:", hours);
+	cx = snprintf(timeleft+cx, sizeof(timeleft), (hours < 10) ? "0%d:" : "%d:", hours);
     if (mins && cx >=0 && cx < 32)
-	cx = snprintf(timeleft+cx, sizeof(timeleft), (mins < 10) ? "0%1.0f:" : "%2.0f:", mins);
+	cx = snprintf(timeleft+cx, sizeof(timeleft), (mins < 10) ? "0%d:" : "%d:", mins);
     if (!days && !hours && !mins && cx >=0 && cx < 32)  // Keep showing the minutes part
-	snprintf(timeleft+cx, sizeof(timeleft), (secs < 10) ? "00:0%1.0f" : "00:%2.0f", secs);
+	snprintf(timeleft+cx, sizeof(timeleft), (secs < 10) ? "00:0%d" : "00:%d", secs);
     else if (cx >= 0 && cx < 32)
-	snprintf(timeleft+cx, sizeof(timeleft), (secs < 10) ? "0%1.0f" : "%2.0f", secs);
+	snprintf(timeleft+cx, sizeof(timeleft), (secs < 10) ? "0%d" : "%d", secs);
 
     /* Progress bar */
     int totaldots = 40;
