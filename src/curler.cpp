@@ -85,7 +85,6 @@ static HEADERS get_headers(const std::string &url)
 	curl_easy_getinfo(curl, CURLINFO_FILETIME, &filetime);
 	curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &content_type);
     }
-    curl_easy_cleanup(curl);
 
     headers.length = static_cast<long>(content_length);
     headers.file_time = filetime;
@@ -100,6 +99,8 @@ static HEADERS get_headers(const std::string &url)
 	    headers.file_type = ".bin";
 	}
     }
+
+    curl_easy_cleanup(curl);
 
     return headers;
 }
