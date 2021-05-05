@@ -10,7 +10,8 @@ std::string err[] = {
 
 std::string warn[] = {
     "Tried but couldn't set file modification time to remote file time",
-    "Couldn't determine filename"
+    "Couldn't determine filename",
+    "Couldn't determine filetype"
 };
 
 std::string info[] = {

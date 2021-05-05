@@ -11,7 +11,8 @@ enum {
 
 enum {
     FILE_WARN_FILETIME,
-    FILE_WARN_FILENAME
+    FILE_WARN_FILENAME,
+    FILE_WARN_FILETYPE
 };
 
 enum {

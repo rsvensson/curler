@@ -6,10 +6,9 @@
 #include <curl/curl.h>
 #include <map>
 #include <string.h>
-#include <variant>
 
-using HEADERS = std::map<const std::string, std::variant<long, std::string>>;
 using MIMETYPES = std::map<const std::string, const std::string>;
+using HEADERS = struct { long length; std::string file_type; };
 
 /* Function prototypes */
 static HEADERS get_headers(const std::string &url);
@@ -70,9 +69,10 @@ static MIMETYPES mimetypes = {
 static HEADERS get_headers(const std::string &url)
 {
     CURL *curl;
-    HEADERS headers;
     double content_length = 0.0;
     char *content_type = nullptr;
+    time_t filetime;
+    HEADERS headers;
 
     curl = curl_easy_init();
     if (curl) {
@@ -82,16 +82,20 @@ static HEADERS get_headers(const std::string &url)
 	curl_easy_perform(curl);
 	curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &content_length);
 	curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &content_type);
-
+	curl_easy_getinfo(curl, CURLINFO_FILETIME, &filetime);
     }
 
-    headers["length"] = static_cast<long>(content_length);
+    headers.length = static_cast<long>(content_length);
     if (content_type)
-	headers["filetype"] = mimetypes[content_type];
+	headers.file_type = mimetypes[content_type];
     else {  // Didn't find content-type. Try to get extension from the url.
 	std::string ct = url.substr(url.rfind('.'), url.back());
 	if (ct.length() > 0)
-	    headers["filetype"] = ct;
+	    headers.file_type = ct;
+	else {
+	    log(warn[FILE_WARN_FILETYPE]);
+	    headers.file_type = ".bin";
+	}
     }
 
     curl_easy_cleanup(curl);
@@ -213,8 +217,8 @@ bool download(const std::string &path, const std::string &filename, const std::s
     }
 
     HEADERS headers = get_headers(url.c_str());
-    long content_length = std::get<long>(headers["length"]);
-    std::string filetype = std::get<std::string>(headers["filetype"]);
+    long content_length = headers.length;
+    std::string filetype = headers.file_type;
     std::string fullpath;
     std::string clean_fname = clean_filename(filename);
 
