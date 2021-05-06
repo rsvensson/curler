@@ -12,7 +12,7 @@ using HEADERS = struct { long length; time_t file_time; std::string file_type; }
 
 /* Function prototypes */
 static HEADERS get_headers(const std::string &url);
-static bool do_download(const char *filename, const char *url, const curl_off_t resume_point);
+static bool do_download(const std::string &filename, const std::string &url, const curl_off_t resume_point);
 bool download(const std::string &path, const std::string &url);
 bool download(const std::string &path, const std::string &filename, const std::string &url);
 
@@ -107,7 +107,7 @@ static HEADERS get_headers(const std::string &url)
 
 
 /* The actual download function */
-static bool do_download(const char *filename, const char *url, const curl_off_t resume_point = 0)
+static bool do_download(const std::string &filename, const std::string &url, const curl_off_t resume_point = 0)
 {
     CURL *curl;
     CURLcode res;
@@ -117,10 +117,10 @@ static bool do_download(const char *filename, const char *url, const curl_off_t 
     curl = curl_easy_init();
     if (curl) {
 	if (resume_point != 0)
-	    fp = fopen(filename, "a+b");
+	    fp = fopen(filename.c_str(), "a+b");
 	else
-	    fp = fopen(filename, "wb");
-	curl_easy_setopt(curl, CURLOPT_URL, url);
+	    fp = fopen(filename.c_str(), "wb");
+	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
 	curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
 	curl_easy_setopt(curl, CURLOPT_RESUME_FROM_LARGE, resume_point);
@@ -137,7 +137,7 @@ static bool do_download(const char *filename, const char *url, const curl_off_t 
 	if (CURLE_OK == res) {
 	    res = curl_easy_getinfo(curl, CURLINFO_FILETIME, &filetime);
 	    if ((CURLE_OK == res) && (filetime >= 0)) {
-		if (!set_filetime(filename, filetime))
+		if (!fileops::set_filetime(filename, filetime))
 		    log(warn[FILE_WARN_FILETIME]);
 		    //printf("\nTried but couldn't set file modification time to remote file time.\n");
 	    }
@@ -196,7 +196,7 @@ bool download(const std::string &path, const std::string &url)
 		do {
 		    filename = name + std::to_string(number);
 		    number++;
-		} while (file_exists(filename));
+		} while (fileops::file_exists(filename));
 	    }
 	}
 
@@ -213,17 +213,17 @@ bool download(const std::string &path, const std::string &url)
 bool download(const std::string &path, const std::string &filename, const std::string &url)
 {
     /* Check that we have write permissions */
-    if (!is_writeable(path)) {
+    if (!fileops::is_writeable(path)) {
 	log(err[FILE_ERR_PERMS]);
 	return false;
     }
 
-    HEADERS headers = get_headers(url.c_str());
+    HEADERS headers = get_headers(url);
     long filesize = headers.length;
     time_t filetime = headers.file_time;
     std::string filetype = headers.file_type;
     std::string fullpath;
-    std::string clean_fname = clean_filename(filename);
+    std::string clean_fname = fileops::clean_filename(filename);
 
     if (path.back() != '/')
 	fullpath = path + '/' + clean_fname;
@@ -234,10 +234,10 @@ bool download(const std::string &path, const std::string &filename, const std::s
     if (fullpath.substr(fullpath.length() - filetype.length()) != filetype)
 	fullpath.append(filetype);
 
-    if (file_exists(fullpath)) {
+    if (fileops::file_exists(fullpath)) {
 	// Compare modification time, and fall back on filesize
-	time_t local_filetime = get_filetime(fullpath.c_str());
-	long local_filesize = get_filesize(fullpath);
+	time_t local_filetime = fileops::get_filetime(fullpath);
+	long local_filesize = fileops::get_filesize(fullpath);
 
 	if (filetime > 0 && filetime == local_filetime) {
 	    log(info[FILE_INFO_SKIP], clean_fname + filetype);
@@ -249,9 +249,9 @@ bool download(const std::string &path, const std::string &filename, const std::s
 
 	log(info[FILE_INFO_EXISTS], fullpath);
 	log(info[FILE_INFO_RESUME], local_filesize);
-	return do_download(fullpath.c_str(), url.c_str(), local_filesize);
+	return do_download(fullpath, url, local_filesize);
     } else {
-	create_dir_if_not_exists(path);
-	return do_download(fullpath.c_str(), url.c_str());
+	fileops::create_dir_if_not_exists(path);
+	return do_download(fullpath, url);
     }
 }
