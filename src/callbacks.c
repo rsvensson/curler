@@ -137,21 +137,21 @@ int progress_callback(void *ptr, double total_to_download, double now_downloaded
 	n = n % MINUTE;
     }
     secs = n;
-    char timeleft[32];
+    char timeleft[16];
     int cx = 0;
-    if (days && cx >=0 && cx < 32)
+    if (days && cx >=0 && cx < 16)
 	cx = snprintf(timeleft+cx, sizeof(timeleft), "%dD:", days);
-    if (hours && cx >=0 && cx < 32)
+    if (hours && cx >=0 && cx < 16)
 	cx = snprintf(timeleft+cx, sizeof(timeleft), (hours < 10) ? "0%d:" : "%d:", hours);
-    if (mins && cx >=0 && cx < 32)
+    if (mins && cx >=0 && cx < 16)
 	cx = snprintf(timeleft+cx, sizeof(timeleft), (mins < 10) ? "0%d:" : "%d:", mins);
-    if (!days && !hours && !mins && cx >=0 && cx < 32)  // Keep showing the minutes part
+    if (!days && !hours && !mins && cx >=0 && cx < 16)  // Keep showing the minutes part
 	snprintf(timeleft+cx, sizeof(timeleft), (secs < 10) ? "00:0%d" : "00:%d", secs);
-    else if (cx >= 0 && cx < 32)
+    else if (cx >= 0 && cx < 16)
 	snprintf(timeleft+cx, sizeof(timeleft), (secs < 10) ? "0%d" : "%d", secs);
 
     /* Progress bar */
-    int totaldots = 40;
+    int totaldots = 30;
     // part of the progress bar that's already full
     int dots = (int)(round(fraction_downloaded * totaldots));
 
