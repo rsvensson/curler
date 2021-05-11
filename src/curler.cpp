@@ -239,10 +239,20 @@ bool download(const std::string &path, const std::string &filename, const std::s
 	time_t local_filetime = fileops::get_filetime(fullpath);
 	long local_filesize = fileops::get_filesize(fullpath);
 
+	// Check if both filetime and filesize match
 	if (filetime > 0 && filetime == local_filetime) {
+	    if (filesize != local_filesize) {
+		// Redownload file
+		log(warn[FILE_WARN_FILESIZE], fullpath);
+		return do_download(fullpath, url);
+	    }
+
 	    log(info[FILE_INFO_SKIP], clean_fname + filetype);
 	    return true;
-	} else if (filetime <= 0 && filesize == local_filesize) {
+	}
+
+	// Couldn't determine filetime, only check filesize
+	if (filetime <= 0 && filesize == local_filesize) {
 	    log(info[FILE_INFO_SKIP], clean_fname + filetype);
 	    return true;
 	}

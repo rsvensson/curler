@@ -11,7 +11,8 @@ std::string err[] = {
 std::string warn[] = {
     "Tried but couldn't set file modification time to remote file time",
     "Couldn't determine filename",
-    "Couldn't determine filetype"
+    "Couldn't determine filetype",
+    "Remote and local file modification time match, but size is different.\nRedownloading"
 };
 
 std::string info[] = {
