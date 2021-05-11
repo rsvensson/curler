@@ -21,13 +21,14 @@ int main(int argc, char *argv[])
 	std::vector<urldata> urls = parse_args(argc, argv);
 	bool res = false;
 
-	for (urldata &url : urls) {
+	for (const urldata &url : urls) {
 	    if (url.filename.length() == 0)
 		res = download(url.path, url.url);
 	    else
 		res = download(url.path, url.filename, url.url);
+	    if (!res) log(err[FILE_ERR_DOWNLOAD], url.filename);
 	}
-	log((res) ? info[FILE_INFO_DONE] : err[FILE_ERR_DOWNLOAD]);
+	log(info[FILE_INFO_DONE]);
 
 	return 0;
 
