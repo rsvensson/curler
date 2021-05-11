@@ -5,6 +5,7 @@ A simple downloader using libcurl
 * Add downloads to a queue which is processed sequentially (multi-download may come in the future)
 * Specify which downloads are downloaded to which path
 * Tries to determine filename automatically if not provided
+* Resume downloads.
 * Simple progress bar output
 
 ## Install
