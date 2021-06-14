@@ -90,14 +90,12 @@ static HEADERS get_headers(const std::string &url)
     headers.file_time = filetime;
     if (content_type)
 	headers.file_type = mimetypes[content_type];
-    else {  // Didn't find content-type. Try to get extension from the url.
-	std::string ct = url.substr(url.rfind('.'), url.back());
-	if (ct.length() > 0)
-	    headers.file_type = ct;
-	else {
-	    log(warn[FILE_WARN_FILETYPE]);
-	    headers.file_type = ".bin";
-	}
+    else if (url.rfind('.') != std::string::npos)  // Didn't find content-type. Try to get extension from the url.
+	headers.file_type = url.substr(url.rfind('.'), url.back());
+    else {
+	// Can't determine file type. Set to .bin
+	log(warn[FILE_WARN_FILETYPE]);
+	headers.file_type = ".bin";
     }
 
     curl_easy_cleanup(curl);
@@ -138,9 +136,9 @@ static bool do_download(const std::string &filename, const std::string &url, con
 	    res = curl_easy_getinfo(curl, CURLINFO_FILETIME, &filetime);
 	    if ((CURLE_OK == res) && (filetime >= 0)) {
 		if (!fileops::set_filetime(filename, filetime))
-		    log(warn[FILE_WARN_FILETIME]);
-		    //printf("\nTried but couldn't set file modification time to remote file time.\n");
-	    }
+		    log(err[FILE_ERR_FILETIME]);
+	    } else
+		log(warn[FILE_WARN_FILETIME]);
 	}
 
 	curl_easy_cleanup(curl);

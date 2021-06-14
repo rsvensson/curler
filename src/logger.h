@@ -6,6 +6,7 @@
 enum {
     FILE_ERR_PERMS,
     FILE_ERR_DOWNLOAD,
+    FILE_ERR_FILETIME,
     URL_ERR_TEXTFILE
 };
 
