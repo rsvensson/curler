@@ -6,7 +6,8 @@ std::string err[] = {
     "Path is not writeable",
     "Couldn't download file",
     "Tried but couldn't set file modification time to remote file time",
-    "Couldn't open"
+    "Couldn't open",
+    "URL is empty. Did you specify a valid URL?"
 };
 
 std::string warn[] = {
