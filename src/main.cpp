@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <string.h>
 #include <vector>
 
 struct urldata
@@ -17,7 +18,14 @@ std::vector<urldata> parse_args(int argc, char *argv[]);
 
 int main(int argc, char *argv[])
 {
-    if (argc > 1) {
+    if (argc > 1 && strcmp(argv[1], "-h") == 0) {
+	std::cout << "usage: curler [-h] [-p <path>] [-f <file>] [-u <url> [filename]]\n" << std::endl;
+	std::cout << "arguments:\n\t-h\tShow this help message and exit\n"
+		  << "\t-p\tPath to download into (defaults to current working directory if not specified)\n"
+		  << "\t-f\tFilename to read urls and filenames from\n"
+		  << "\t-u\tURL to download, followed by optional filename\n" << std::endl;
+	std::cout << "example:\n\tcurler -p ~/Downloads -u https://example.com/file.mp4 video.mp4" << std::endl;
+    } else if (argc > 1) {
 	std::vector<urldata> urls = parse_args(argc, argv);
 	bool res = false;
 
