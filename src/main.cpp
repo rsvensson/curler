@@ -30,11 +30,13 @@ int main(int argc, char *argv[])
 	bool res = false;
 
 	for (const urldata &url : urls) {
-	    if (url.filename.length() == 0)
-		res = download(url.path, url.url);
-	    else
-		res = download(url.path, url.filename, url.url);
-	    if (!res) log(err[FILE_ERR_DOWNLOAD], url.filename);
+	    if (url.url.length() > 0) {
+		if (url.filename.length() == 0)
+		    res = download(url.path, url.url);
+		else
+		    res = download(url.path, url.filename, url.url);
+		if (!res) log(err[FILE_ERR_DOWNLOAD], url.filename);
+	    } else log(err[URL_ERR_EMPTY]);
 	}
 	log(info[FILE_INFO_DONE]);
 
