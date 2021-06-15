@@ -7,14 +7,27 @@
 #include <map>
 #include <string.h>
 
+struct headers {
+    long content_length = 0;
+    char content_type[16];
+    char content_disposition[512] = "None";
+    time_t filetime = 0;
+};
+
 using MIMETYPES = std::map<const std::string, const std::string>;
-using HEADERS = struct { long length; time_t file_time; std::string file_type; };
+
 
 /* Function prototypes */
-static HEADERS get_headers(const std::string &url);
-static bool do_download(const std::string &filename, const std::string &url, const curl_off_t resume_point);
-bool download(const std::string &path, const std::string &url);
-bool download(const std::string &path, const std::string &filename, const std::string &url);
+static headers get_headers(const std::string &url, CURL *curl);
+static std::string find_filename(const std::string &url, const headers &hdrs,
+				 CURL *curl);
+static curl_off_t get_resume_point(const std::string &fullpath,
+				   const headers &hdrs);
+static std::string get_fullpath(const std::string &path,
+				const std::string &filename,
+				const std::string &filetype);
+bool download(const std::string &url, const std::string &path,
+	      const std::string &filename);
 
 
 /* For getting the extension of files if not specified. */
@@ -65,77 +78,185 @@ static MIMETYPES mimetypes = {
 };
 
 
-/* Get headers so we can determine size and mimetype of content */
-static HEADERS get_headers(const std::string &url)
+static headers get_headers(const std::string &url, CURL *curl)
 {
-    CURL *curl;
-    HEADERS headers;
-    double content_length = 0.0;
+    headers hdrs;
     char *content_type = nullptr;
-    time_t filetime = 0;
 
-    curl = curl_easy_init();
-    if (curl) {
-	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-	curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
-	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-	curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
-	curl_easy_perform(curl);
-	curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &content_length);
-	curl_easy_getinfo(curl, CURLINFO_FILETIME, &filetime);
-	curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &content_type);
-    }
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
+    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &hdrs.content_disposition);
+    curl_easy_perform(curl);
 
-    headers.length = static_cast<long>(content_length);
-    headers.file_time = filetime;
+    curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &hdrs.content_length);
+    curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &content_type);
+    curl_easy_getinfo(curl, CURLINFO_FILETIME, &hdrs.filetime);
+
     if (content_type)
-	headers.file_type = mimetypes[content_type];
+	strcpy(hdrs.content_type, mimetypes[content_type].c_str());
     else if (url.rfind('.') != std::string::npos)  // Didn't find content-type. Try to get extension from the url.
-	headers.file_type = url.substr(url.rfind('.'), url.back());
+	strcpy(hdrs.content_type, url.substr( url.rfind('.'), url.back() ).c_str());
     else {
 	// Can't determine file type. Set to .bin
 	log(warn[FILE_WARN_FILETYPE]);
-	headers.file_type = ".bin";
+	strcpy(hdrs.content_type, ".bin");
     }
 
-    curl_easy_cleanup(curl);
+    curl_easy_reset(curl);
 
-    return headers;
+    return hdrs;
 }
 
 
-/* The actual download function */
-static bool do_download(const std::string &filename, const std::string &url, const curl_off_t resume_point = 0)
+static std::string find_filename(const std::string &url, const headers &hdrs, CURL *curl)
 {
-    CURL *curl;
-    CURLcode res;
-    FILE *fp;
-    time_t filetime;
+    std::string filename;
 
-    curl = curl_easy_init();
+    if (strcmp(hdrs.content_disposition, "None") != 0) {
+	// Make sure we have a nice decoded filename if we found one
+	int outlength;
+	filename = curl_easy_unescape(curl, hdrs.content_disposition,
+				      strlen(hdrs.content_disposition), &outlength);
+	// Temp workaround for removing the trailing "
+	filename.pop_back();
+    }
+    // Filename not found in content-disposition. Try the url.
+    else {
+	char sep = '/';
+	char php = '?';  // To hopefully remove any pesky trailing php arguments
+	size_t s = url.rfind(sep, url.length());
+
+	if (s != std::string::npos) {
+	    filename = url.substr(s+1, url.length() - s);
+	    size_t p = filename.rfind(php, filename.length());
+	    if (p != std::string::npos)
+		filename = filename.substr(0, p);
+	}
+	// Last resort
+	else {
+	    log(warn[FILE_WARN_FILENAME]);
+	    std::string name = "file";
+	    int number = 1;
+	    do {
+		filename = name + std::to_string(number);
+		number++;
+	    } while (fileops::file_exists(filename));
+	}
+    }
+
+    return filename;
+}
+
+
+/*
+ * Checks if a file has already been downloaded, and if so checks if it should
+ * be skipped or if we should resume the download.
+ * Returns the byte we should resume at, 0 if it should be redownloaded (i.e.
+ * start from the beginning again), or -1 if it should be skipped.
+ */
+static curl_off_t get_resume_point(const std::string &fullpath, const headers &hdrs)
+{
+    std::string filename = fullpath.substr(fullpath.rfind('/'), fullpath.length());
+
+    if (fileops::file_exists(fullpath)) {
+	// Compare modification time, and fall back on filesize
+	time_t local_filetime = fileops::get_filetime(fullpath);
+	long local_filesize = fileops::get_filesize(fullpath);
+
+	// Check if both filetime and filesize match
+	if (hdrs.filetime > 0 && hdrs.filetime == local_filetime) {
+	    if (hdrs.content_length != local_filesize) {
+		// Redownload file
+		log(warn[FILE_WARN_FILESIZE], fullpath);
+		return 0;
+	    }
+
+	    log(info[FILE_INFO_SKIP], filename);
+	    return -1;
+	}
+
+	// Couldn't determine filetime, only check filesize
+	if (hdrs.filetime <= 0 && hdrs.content_length == local_filesize) {
+	    log(info[FILE_INFO_SKIP], filename);
+	    return -1;
+	}
+
+	log(info[FILE_INFO_EXISTS], fullpath);
+	log(info[FILE_INFO_RESUME], local_filesize);
+	return local_filesize;
+    } else {
+	return 0;
+    }
+}
+
+
+static std::string get_fullpath(const std::string &path, const std::string &filename, const std::string &filetype)
+{
+    std::string fullpath;
+
+    if (path.back() != '/')
+	fullpath = path + '/' + filename;
+    else
+	fullpath = path + filename;
+
+    // Make sure we have the file ending
+    if (fullpath.substr(fullpath.length() - filetype.length()) != filetype)
+	fullpath.append(filetype);
+
+    return fullpath;
+}
+
+
+bool download(const std::string &url, const std::string &path, const std::string &filename)
+{
+    CURL *curl = curl_easy_init();
+
     if (curl) {
+	curl_off_t resume_point;
+	CURLcode res;
+	FILE *fp;
+	headers hdrs = get_headers(url, curl);
+	std::string fname = filename;
+	std::string fullpath;
+
+
+	if (fname.empty())
+	    fname = find_filename(url, hdrs, curl);
+	fname = fileops::clean_filename(fname);
+	fullpath = get_fullpath(path, fname, hdrs.content_type);
+	resume_point = get_resume_point(fullpath, hdrs);
+
+	/* Check that we have write permissions */
+	if (!fileops::is_writeable(path)) {
+	    log(err[FILE_ERR_PERMS]);
+	    curl_easy_cleanup(curl);
+	    return false;
+	}
+
 	if (resume_point != 0)
-	    fp = fopen(filename.c_str(), "a+b");
+	    fp = std::fopen(fullpath.c_str(), "a+b");
 	else
-	    fp = fopen(filename.c_str(), "wb");
+	    fp = std::fopen(fullpath.c_str(), "wb");
 	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-	curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
 	curl_easy_setopt(curl, CURLOPT_RESUME_FROM_LARGE, resume_point);
 	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
 	curl_easy_setopt(curl, CURLOPT_PROGRESSFUNCTION, progress_callback);
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
 
-	log(info[FILE_INFO_DOWNLOAD], filename);
+	log(info[FILE_INFO_DOWNLOAD], fullpath);
 	res = curl_easy_perform(curl);
 	std::fclose(fp);
 
 	// Try to set file modification time to remote file time
 	if (CURLE_OK == res) {
-	    res = curl_easy_getinfo(curl, CURLINFO_FILETIME, &filetime);
-	    if ((CURLE_OK == res) && (filetime >= 0)) {
-		if (!fileops::set_filetime(filename, filetime))
+	    res = curl_easy_getinfo(curl, CURLINFO_FILETIME, &hdrs.filetime);
+	    if ((CURLE_OK == res) && (hdrs.filetime >= 0)) {
+		if (!fileops::set_filetime(filename, hdrs.filetime))
 		    log(err[FILE_ERR_FILETIME]);
 	    } else
 		log(warn[FILE_WARN_FILETIME]);
@@ -145,121 +266,4 @@ static bool do_download(const std::string &filename, const std::string &url, con
 	return true;
     } else
 	return false;
-}
-
-
-/* Determine filename, then send to the other download function */
-bool download(const std::string &path, const std::string &url)
-{
-    CURL *curl;
-    char content_disposition[1000] = "None";
-    std::string filename;
-
-    curl = curl_easy_init();
-    if (curl) {
-	// First try to get filename through content-disposition header
-	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-	curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
-	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-	curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
-	curl_easy_setopt(curl, CURLOPT_HEADERDATA, &content_disposition);
-	curl_easy_perform(curl);
-	curl_easy_cleanup(curl);
-
-	if (strcmp(content_disposition, "None") != 0) {
-	    // Make sure we have a nice decoded filename if we found one
-	    int outlength;
-	    filename = curl_easy_unescape(curl, content_disposition,
-					  strlen(content_disposition), &outlength);
-	    // Temp workaround for removing the trailing "
-	    filename.pop_back();
-	}
-	// Filename not found in content-disposition. Try the url.
-	else {
-	    char sep = '/';
-	    char php = '?';  // To hopefully remove any pesky trailing php arguments
-	    size_t s = url.rfind(sep, url.length());
-
-	    if (s != std::string::npos) {
-		filename = url.substr(s+1, url.length() - s);
-		size_t p = filename.rfind(php, filename.length());
-		if (p != std::string::npos)
-		    filename = filename.substr(0, p);
-	    }
-	    // Last resort
-	    else {
-		log(warn[FILE_WARN_FILENAME]);
-		std::string name = "file";
-		int number = 1;
-		do {
-		    filename = name + std::to_string(number);
-		    number++;
-		} while (fileops::file_exists(filename));
-	    }
-	}
-
-	return download(path, filename, url);
-    } else
-	return false;
-}
-
-
-/*
- * Prepares the filename and checks if we've downloaded the file already.
- * The actual download happens in do_download()
- */
-bool download(const std::string &path, const std::string &filename, const std::string &url)
-{
-    /* Check that we have write permissions */
-    if (!fileops::is_writeable(path)) {
-	log(err[FILE_ERR_PERMS]);
-	return false;
-    }
-
-    HEADERS headers = get_headers(url);
-    long filesize = headers.length;
-    time_t filetime = headers.file_time;
-    std::string filetype = headers.file_type;
-    std::string fullpath;
-    std::string clean_fname = fileops::clean_filename(filename);
-
-    if (path.back() != '/')
-	fullpath = path + '/' + clean_fname;
-    else
-	fullpath = path + clean_fname;
-
-    // Make sure we have the file ending
-    if (fullpath.substr(fullpath.length() - filetype.length()) != filetype)
-	fullpath.append(filetype);
-
-    if (fileops::file_exists(fullpath)) {
-	// Compare modification time, and fall back on filesize
-	time_t local_filetime = fileops::get_filetime(fullpath);
-	long local_filesize = fileops::get_filesize(fullpath);
-
-	// Check if both filetime and filesize match
-	if (filetime > 0 && filetime == local_filetime) {
-	    if (filesize != local_filesize) {
-		// Redownload file
-		log(warn[FILE_WARN_FILESIZE], fullpath);
-		return do_download(fullpath, url);
-	    }
-
-	    log(info[FILE_INFO_SKIP], clean_fname + filetype);
-	    return true;
-	}
-
-	// Couldn't determine filetime, only check filesize
-	if (filetime <= 0 && filesize == local_filesize) {
-	    log(info[FILE_INFO_SKIP], clean_fname + filetype);
-	    return true;
-	}
-
-	log(info[FILE_INFO_EXISTS], fullpath);
-	log(info[FILE_INFO_RESUME], local_filesize);
-	return do_download(fullpath, url, local_filesize);
-    } else {
-	fileops::create_dir_if_not_exists(path);
-	return do_download(fullpath, url);
-    }
 }
