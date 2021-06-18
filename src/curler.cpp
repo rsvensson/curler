@@ -9,7 +9,7 @@
 
 struct headers {
     long content_length = 0;
-    char content_type[16];
+    char content_type[16] = "";
     char content_disposition[512] = "None";
     time_t filetime = 0;
 };
@@ -202,8 +202,10 @@ bool download(const std::string &url, const std::string &path, const std::string
 	    return false;
 	}
 
-	if (resume_point == -1)
+	if (resume_point == -1) {
+	    curl_easy_cleanup(curl);
 	    return true;
+	}
 	if (resume_point != 0)
 	    fp = std::fopen(fullpath.c_str(), "a+b");
 	else
@@ -221,14 +223,11 @@ bool download(const std::string &url, const std::string &path, const std::string
 	std::fclose(fp);
 
 	// Try to set file modification time to remote file time
-	if (CURLE_OK == res) {
-	    res = curl_easy_getinfo(curl, CURLINFO_FILETIME, &hdrs.filetime);
-	    if ((CURLE_OK == res) && (hdrs.filetime >= 0)) {
-		if (!fileops::set_filetime(filename, hdrs.filetime))
-		    log(err[FILE_ERR_FILETIME]);
-	    } else
-		log(warn[FILE_WARN_FILETIME]);
-	}
+	if ((CURLE_OK == res) && (hdrs.filetime >= 0)) {
+	    if (!fileops::set_filetime(fullpath, hdrs.filetime))
+		log(err[FILE_ERR_FILETIME]);
+	} else
+	    log(warn[FILE_WARN_FILETIME]);
 
 	curl_easy_cleanup(curl);
 	return true;

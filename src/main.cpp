@@ -38,12 +38,12 @@ int main(int argc, char *argv[])
 	}
 	log(info[FILE_INFO_DONE]);
 
-	return 0;
-
     } else {
 	std::cout << "Usage: " << argv[0] << " [-p <path>] [-u] <url> [filename]" << std::endl;
 	return -1;
     }
+
+    return 0;
 }
 
 std::vector<urldata> parse_args(int argc, char *argv[])
