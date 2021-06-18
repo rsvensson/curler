@@ -64,7 +64,7 @@ std::vector<urldata> parse_args(int argc, char *argv[])
 	} else if (u.compare(argv[i]) == 0) {
 	    data.url = argv[++i];
 	    data.path = path;
-	    if (i+1 < argc && u.compare(argv[i+1]) && p.compare(argv[i+1]))
+	    if (i+1 < argc && u.compare(argv[i+1]) && p.compare(argv[i+1]) && f.compare(argv[i+1]))
 		data.filename = argv[++i];
 	    else
 		data.filename = "";
