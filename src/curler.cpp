@@ -2,9 +2,9 @@
 #include "callbacks.h"
 #include "fileops.h"
 #include "logger.h"
+#include "mimetypes.h"
 
 #include <curl/curl.h>
-#include <map>
 #include <string.h>
 
 struct headers {
@@ -13,8 +13,6 @@ struct headers {
     char content_disposition[512] = "None";
     time_t filetime = 0;
 };
-
-using MIMETYPES = std::map<const std::string, const std::string>;
 
 
 /* Function prototypes */
@@ -30,58 +28,12 @@ bool download(const std::string &url, const std::string &path,
 	      const std::string &filename);
 
 
-/* For getting the extension of files if not specified. */
-static MIMETYPES mimetypes = {
-    { "application/pdf",                   ".pdf" },
-    { "application/pgp-signature",         ".sig" },
-    { "application/futuresplash",          ".spl" },
-    { "application/octet-stream",          ".class" },
-    { "application/postscript",            ".ps" },
-    { "application/x-bittorrent",          ".torrent" },
-    { "application/x-dvi",                 ".dvi" },
-    { "application/x-gzip",                ".gz" },
-    { "application/x-tar",                 ".tar" },
-    { "application/x-tgz",                 ".tar.gz" },
-    { "application/x-bzip",                ".bz2" },
-    { "application/x-bzip-compressed-tar", ".tar.bz2" },
-    { "application/zip",                   ".zip" },
-    { "application/x-ns-proxy-autoconfig", ".pac" },
-    { "application/x-shockwave-flash",     ".swf" },
-    { "application/ogg",                   ".ogg" },
-    { "audio/mpeg",                        ".mp3" },
-    { "audio/x-mpegurl",                   ".m3u" },
-    { "audio/x-ms-wma",                    ".wma" },
-    { "audio/x-ms-wax",                    ".wax" },
-    { "audio/x-wav",                       ".wav" },
-    { "audio/mp4",                         ".m4a" },
-    { "audio/flac",                        ".flac" },
-    { "image/gif",                         ".gif" },
-    { "image/jpg",                         ".jpg" },
-    { "image/png",                         ".png" },
-    { "image/svg+xml",                     ".svg" },
-    { "image/x-xbitmap",                   ".xbm" },
-    { "image/x-xpixmap",                   ".xpm" },
-    { "image/x-xwindowdump",               ".xwd" },
-    { "text/css",                          ".css" },
-    { "text/html",                         ".html" },
-    { "text/javascript",                   ".js" },
-    { "text/plain",                        ".txt" },
-    { "text/xml",                          ".xml" },
-    { "video/mpeg",                        ".avi" },
-    { "video/quicktime",                   ".mov" },
-    { "video/x-flv",                       ".flv" },
-    { "video/x-ms-asf",                    ".asf" },
-    { "video/x-ms-wmv",                    ".wvv" },
-    { "video/x-matroska",                  ".mkv" },
-    { "video/mp4",                         ".mp4" },
-    { "video/webm",                        ".webm" }
-};
-
-
 static headers get_headers(const std::string &url, CURL *curl)
 {
     headers hdrs;
     char *content_type = nullptr;
+    double content_length = 0.0;
+    time_t filetime = 0;
 
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
@@ -91,14 +43,23 @@ static headers get_headers(const std::string &url, CURL *curl)
     curl_easy_setopt(curl, CURLOPT_HEADERDATA, &hdrs.content_disposition);
     curl_easy_perform(curl);
 
-    curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &hdrs.content_length);
+    curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &content_length);
     curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &content_type);
-    curl_easy_getinfo(curl, CURLINFO_FILETIME, &hdrs.filetime);
+    curl_easy_getinfo(curl, CURLINFO_FILETIME, &filetime);
 
-    if (content_type)
-	strcpy(hdrs.content_type, mimetypes[content_type].c_str());
-    else if (url.rfind('.') != std::string::npos)  // Didn't find content-type. Try to get extension from the url.
-	strcpy(hdrs.content_type, url.substr( url.rfind('.'), url.back() ).c_str());
+    hdrs.content_length = static_cast<long>(content_length);
+    hdrs.filetime = filetime;
+
+    if (content_type) {
+	// Some web servers print out the charset part in upper and some in lower case...
+	for (auto it = content_type; *it != '\0'; it++)
+	    *it = std::tolower(static_cast<unsigned char>(*it));
+    }
+
+    if (content_type && mimetypes.find(content_type) != mimetypes.end())
+	strcpy(hdrs.content_type, mimetypes.at(content_type).c_str());
+    else if (url.substr( url.rfind('/') ).rfind('.') != std::string::npos)  // Try to get extension from the url.
+	strcpy(hdrs.content_type, url.substr(url.rfind('.')).c_str());
     else {
 	// Can't determine file type. Set to .bin
 	log(warn[FILE_WARN_FILETYPE]);
@@ -193,17 +154,22 @@ static curl_off_t get_resume_point(const std::string &fullpath, const headers &h
 }
 
 
+/* Returns the full path to the file, and makes sure the filetype extension is appended to the filename */
 static std::string get_fullpath(const std::string &path, const std::string &filename, const std::string &filetype)
 {
     std::string fullpath;
+    std::string filetype_lower;
 
     if (path.back() != '/')
 	fullpath = path + '/' + filename;
     else
 	fullpath = path + filename;
 
-    // Make sure we have the file ending
-    if (fullpath.substr(fullpath.length() - filetype.length()) != filetype)
+    filetype_lower = fullpath.substr(fullpath.length() - filetype.length());
+    for (size_t i = 0; i < filetype_lower.length(); i++)
+	filetype_lower[i] = std::tolower(static_cast<unsigned char>(filetype_lower[i]));
+
+    if (filetype != filetype_lower)
 	fullpath.append(filetype);
 
     return fullpath;
@@ -236,6 +202,8 @@ bool download(const std::string &url, const std::string &path, const std::string
 	    return false;
 	}
 
+	if (resume_point == -1)
+	    return true;
 	if (resume_point != 0)
 	    fp = std::fopen(fullpath.c_str(), "a+b");
 	else
