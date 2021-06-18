@@ -120,7 +120,7 @@ static std::string find_filename(const std::string &url, const headers &hdrs, CU
  */
 static curl_off_t get_resume_point(const std::string &fullpath, const headers &hdrs)
 {
-    std::string filename = fullpath.substr(fullpath.rfind('/'), fullpath.length());
+    std::string filename = fullpath.substr(fullpath.rfind('/') + 1, fullpath.length());
 
     if (fileops::file_exists(fullpath)) {
 	// Compare modification time, and fall back on filesize
