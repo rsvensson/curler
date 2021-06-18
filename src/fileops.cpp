@@ -27,7 +27,7 @@ bool fileops::file_exists(const std::string &filename) {
 }
 
 
-long fileops::get_filesize(const std::string &filename) {
+std::uintmax_t fileops::get_filesize(const std::string &filename) {
     return fs::file_size(filename);
 }
 

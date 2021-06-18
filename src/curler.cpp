@@ -8,7 +8,7 @@
 #include <string.h>
 
 struct headers {
-    long content_length = 0;
+    long long content_length = 0;
     char content_type[16] = "";
     char content_disposition[512] = "None";
     time_t filetime = 0;
@@ -47,7 +47,7 @@ static headers get_headers(const std::string &url, CURL *curl)
     curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &content_type);
     curl_easy_getinfo(curl, CURLINFO_FILETIME, &filetime);
 
-    hdrs.content_length = static_cast<long>(content_length);
+    hdrs.content_length = static_cast<long long>(content_length);
     hdrs.filetime = filetime;
 
     if (content_type) {
@@ -125,7 +125,7 @@ static curl_off_t get_resume_point(const std::string &fullpath, const headers &h
     if (fileops::file_exists(fullpath)) {
 	// Compare modification time, and fall back on filesize
 	time_t local_filetime = fileops::get_filetime(fullpath);
-	long local_filesize = fileops::get_filesize(fullpath);
+	long long local_filesize = fileops::get_filesize(fullpath);
 
 	// Check if both filetime and filesize match
 	if (hdrs.filetime > 0 && hdrs.filetime == local_filetime) {
