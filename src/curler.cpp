@@ -20,7 +20,7 @@ static headers get_headers(const std::string &url, CURL *curl);
 static std::string find_filename(const std::string &url, const headers &hdrs,
 				 CURL *curl);
 static curl_off_t get_resume_point(const std::string &fullpath,
-				   const headers &hdrs);
+				    const headers &hdrs);
 static std::string get_fullpath(const std::string &path,
 				const std::string &filename,
 				const std::string &filetype);
@@ -123,7 +123,6 @@ static curl_off_t get_resume_point(const std::string &fullpath, const headers &h
     std::string filename = fullpath.substr(fullpath.rfind('/') + 1, fullpath.length());
 
     if (fileops::file_exists(fullpath)) {
-	// Compare modification time, and fall back on filesize
 	time_t local_filetime = fileops::get_filetime(fullpath);
 	long long local_filesize = fileops::get_filesize(fullpath);
 
@@ -139,7 +138,7 @@ static curl_off_t get_resume_point(const std::string &fullpath, const headers &h
 	    return -1;
 	}
 
-	// Couldn't determine filetime, only check filesize
+	// Couldn't determine filetime, fall back on filesize
 	if (hdrs.filetime <= 0 && hdrs.content_length == local_filesize) {
 	    log(info[FILE_INFO_SKIP], filename);
 	    return -1;
@@ -181,7 +180,7 @@ bool download(const std::string &url, const std::string &path, const std::string
     CURL *curl = curl_easy_init();
 
     if (curl) {
-	curl_off_t resume_point;
+	curl_off_t *resume_point = new curl_off_t;
 	CURLcode res;
 	FILE *fp;
 	headers hdrs = get_headers(url, curl);
@@ -193,28 +192,31 @@ bool download(const std::string &url, const std::string &path, const std::string
 	    fname = find_filename(url, hdrs, curl);
 	fname = fileops::clean_filename(fname);
 	fullpath = get_fullpath(path, fname, hdrs.content_type);
-	resume_point = get_resume_point(fullpath, hdrs);
+	*resume_point = get_resume_point(fullpath, hdrs);
 
 	/* Check that we have write permissions */
 	if (!fileops::is_writeable(path)) {
 	    log(err[FILE_ERR_PERMS]);
 	    curl_easy_cleanup(curl);
+	    delete resume_point;
 	    return false;
 	}
 
-	if (resume_point == -1) {
+	if (*resume_point == -1) {
 	    curl_easy_cleanup(curl);
+	    delete resume_point;
 	    return true;
 	}
-	if (resume_point != 0)
+	if (*resume_point != 0)
 	    fp = std::fopen(fullpath.c_str(), "a+b");
 	else
 	    fp = std::fopen(fullpath.c_str(), "wb");
 	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
 	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-	curl_easy_setopt(curl, CURLOPT_RESUME_FROM_LARGE, resume_point);
+	curl_easy_setopt(curl, CURLOPT_RESUME_FROM_LARGE, *resume_point);
 	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
 	curl_easy_setopt(curl, CURLOPT_PROGRESSFUNCTION, progress_callback);
+	curl_easy_setopt(curl, CURLOPT_PROGRESSDATA, resume_point);
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
 
@@ -230,6 +232,7 @@ bool download(const std::string &url, const std::string &path, const std::string
 	    log(warn[FILE_WARN_FILETIME]);
 
 	curl_easy_cleanup(curl);
+	delete resume_point;
 	return true;
     } else
 	return false;

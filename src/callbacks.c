@@ -43,20 +43,26 @@ int progress_callback(void *ptr, double total_to_download, double now_downloaded
     if (total_to_download <= 0.0)
 	return 0;
 
-    /* For measuring download speed & time remaining */
-    static double current_total = total_to_download;
+    /* Measure download speed & time remaining */
+    long *resume_point = (long*)ptr; // Byte we resume the download at, if file exists. Otherwise 0.
+    double actual_dl_size = total_to_download + (double)*resume_point;
+    double actual_now_dl = now_downloaded + (double)*resume_point;
+    static double current_total = actual_dl_size;
     static time_t start_time = time(NULL);
-    // Watch total_to_download to see if the file changes
-    if (current_total != total_to_download) {
-	current_total = total_to_download;
+    // Watch actual_dl_size to see if the file changes
+    if (current_total != actual_dl_size) {
+	current_total = actual_dl_size;
 	start_time = time(NULL);
     }
     time_t current_time = time(NULL);
     time_t transfer_time = start_time - current_time;
-    double fraction_downloaded = now_downloaded / total_to_download;
-    // Calculate time remaining
-    double download_eta = transfer_time - (transfer_time / fraction_downloaded);
-    // Calculate download speed
+    double fraction_downloaded = actual_now_dl / actual_dl_size;
+    /*
+     * Calculate time remaining & download speed, in seconds & bytes
+     * respectively. Here we must use the numbers without resume_point,
+     * otherwise we get wrong results when resuming a download.
+     */
+    double download_eta = transfer_time - (transfer_time / (now_downloaded / total_to_download) );
     double current_dl_speed = (now_downloaded / transfer_time) * -1; // We get negative values back
 
     /* Determine what units we should use */
@@ -68,39 +74,39 @@ int progress_callback(void *ptr, double total_to_download, double now_downloaded
     double dlspeed;
 
     // Download size
-    if (total_to_download >= TBYTE) {
+    if (actual_dl_size >= TBYTE) {
 	dlunit = "TiB";
-	total_size = total_to_download / TBYTE;
-    } else if (total_to_download >= GBYTE) {
+	total_size = actual_dl_size / TBYTE;
+    } else if (actual_dl_size >= GBYTE) {
 	dlunit = "GiB";
-	total_size = total_to_download / GBYTE;
-    } else if (total_to_download >= MBYTE) {
+	total_size = actual_dl_size / GBYTE;
+    } else if (actual_dl_size >= MBYTE) {
 	dlunit = "MiB";
-	total_size = total_to_download / MBYTE;
-    } else if (total_to_download >= KBYTE) {
+	total_size = actual_dl_size / MBYTE;
+    } else if (actual_dl_size >= KBYTE) {
 	dlunit = "KiB";
-	total_size = total_to_download / KBYTE;
+	total_size = actual_dl_size / KBYTE;
     } else {
 	dlunit = "B";
-	total_size = total_to_download;
+	total_size = actual_dl_size;
     }
 
     // Downloaded size
-    if (now_downloaded >= TBYTE) {
+    if (actual_now_dl >= TBYTE) {
 	ndunit = "TiB";
-	downloaded = now_downloaded / TBYTE;
-    } else if (now_downloaded >= GBYTE) {
+	downloaded = actual_now_dl / TBYTE;
+    } else if (actual_now_dl >= GBYTE) {
 	ndunit = "GiB";
-	downloaded = now_downloaded / GBYTE;
-    } else if (now_downloaded >= MBYTE) {
+	downloaded = actual_now_dl / GBYTE;
+    } else if (actual_now_dl >= MBYTE) {
 	ndunit = "MiB";
-	downloaded = now_downloaded / MBYTE;
-    } else if (now_downloaded >= KBYTE) {
+	downloaded = actual_now_dl / MBYTE;
+    } else if (actual_now_dl >= KBYTE) {
 	ndunit = "KiB";
-	downloaded = now_downloaded / KBYTE;
+	downloaded = actual_now_dl / KBYTE;
     } else {
 	ndunit = "B";
-	downloaded = now_downloaded;
+	downloaded = actual_now_dl;
     }
 
     // Speed
