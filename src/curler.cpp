@@ -17,8 +17,8 @@ struct headers {
 
 /* Function prototypes */
 static headers get_headers(const std::string &url, CURL *curl);
-static std::string find_filename(const std::string &url, const headers &hdrs,
-				 CURL *curl);
+static std::string find_filename(const std::string &url, const std::string &path,
+				 const headers &hdrs, CURL *curl);
 static curl_off_t get_resume_point(const std::string &fullpath,
 				    const headers &hdrs);
 static std::string get_fullpath(const std::string &path,
@@ -72,7 +72,12 @@ static headers get_headers(const std::string &url, CURL *curl)
 }
 
 
-static std::string find_filename(const std::string &url, const headers &hdrs, CURL *curl)
+/*
+ * Tries to determine filename either from the content-disposition or the url,
+ * falling back on a generic name "file" if it can't be determined otherwise.
+ */
+static std::string find_filename(const std::string &url, const std::string &path,
+				 const headers &hdrs, CURL *curl)
 {
     std::string filename;
 
@@ -104,7 +109,8 @@ static std::string find_filename(const std::string &url, const headers &hdrs, CU
 	    do {
 		filename = name + std::to_string(number);
 		number++;
-	    } while (fileops::file_exists(filename));
+	    } while (fileops::file_exists(path.back() != '/' ? path + '/' : path
+					  + filename + hdrs.content_type));
 	}
     }
 
@@ -164,6 +170,7 @@ static std::string get_fullpath(const std::string &path, const std::string &file
     else
 	fullpath = path + filename;
 
+    // Lowercase filetype in case the filename uses uppercase for the extension.
     filetype_lower = fullpath.substr(fullpath.length() - filetype.length());
     for (size_t i = 0; i < filetype_lower.length(); i++)
 	filetype_lower[i] = std::tolower(static_cast<unsigned char>(filetype_lower[i]));
@@ -189,7 +196,7 @@ bool download(const std::string &url, const std::string &path, const std::string
 
 
 	if (fname.empty())
-	    fname = find_filename(url, hdrs, curl);
+	    fname = find_filename(url, path, hdrs, curl);
 	fname = fileops::clean_filename(fname);
 	fullpath = get_fullpath(path, fname, hdrs.content_type);
 	*resume_point = get_resume_point(fullpath, hdrs);
