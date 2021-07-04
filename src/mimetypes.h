@@ -919,6 +919,7 @@ const MIMETYPES mimetypes = {
     {"text/csv-schema",        ".csvs"},
     {"text/dns",        ".zone"},
     {"text/html",        ".html"},
+    {"text/html; charset=utf-8",        ".html"},
     {"text/html-sandboxed",        ".sandboxed"},
     {"text/jcr-cnd",        ".cnd"},
     {"text/markdown; charset=utf-8",        ".md"},
