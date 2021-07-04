@@ -44,9 +44,9 @@ int progress_callback(void *ptr, double total_to_download, double now_downloaded
 	return 0;
 
     /* Measure download speed & time remaining */
-    long *resume_point = (long*)ptr; // Byte we resume the download at, if file exists. Otherwise 0.
-    double actual_dl_size = total_to_download + (double)*resume_point;
-    double actual_now_dl = now_downloaded + (double)*resume_point;
+    double *resume_point = (double*)ptr; // Byte we resume the download at, if file exists. Otherwise 0.
+    double actual_dl_size = total_to_download + *resume_point;
+    double actual_now_dl = now_downloaded + *resume_point;
     static double current_total = actual_dl_size;
     static time_t start_time = time(NULL);
     // Watch actual_dl_size to see if the file changes
