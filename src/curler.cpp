@@ -202,7 +202,8 @@ static std::string get_fullpath(const std::string &path, const std::string &file
 	 * since it would be inaccurate and the filename likely already
 	 * has the correct filetype appended from find_filename().
 	 */
-	if (location.compare("None") == 0 && filetype.compare(".html") != 0)
+	if (location.compare("None") == 0
+	    || (location.compare("None") != 0 && filetype.compare(".html") != 0))
 	    fullpath.append(filetype);
     }
 
