@@ -11,6 +11,7 @@ struct headers {
     long long content_length = 0;
     char content_type[16] = "";
     char content_disposition[512] = "None";
+    char location[1024] = "None";
     time_t filetime = 0;
 };
 
@@ -23,7 +24,7 @@ static curl_off_t get_resume_point(const std::string &fullpath,
 				    const headers &hdrs);
 static std::string get_fullpath(const std::string &path,
 				const std::string &filename,
-				const std::string &filetype);
+				const headers &hdrs);
 bool download(const std::string &url, const std::string &path,
 	      const std::string &filename);
 
@@ -31,6 +32,7 @@ bool download(const std::string &url, const std::string &path,
 static headers get_headers(const std::string &url, CURL *curl)
 {
     headers hdrs;
+    txt_headers thdrs;
     char *content_type = nullptr;
     double content_length = 0.0;
     time_t filetime = 0;
@@ -40,13 +42,15 @@ static headers get_headers(const std::string &url, CURL *curl)
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
     curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
-    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &hdrs.content_disposition);
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &thdrs);
     curl_easy_perform(curl);
 
     curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &content_length);
     curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &content_type);
     curl_easy_getinfo(curl, CURLINFO_FILETIME, &filetime);
 
+    strcpy(hdrs.content_disposition, thdrs.content_disposition);
+    strcpy(hdrs.location, thdrs.location);
     hdrs.content_length = static_cast<long long>(content_length);
     hdrs.filetime = filetime;
 
@@ -89,17 +93,32 @@ static std::string find_filename(const std::string &url, const std::string &path
 	// Temp workaround for removing the trailing "
 	filename.pop_back();
     }
-    // Filename not found in content-disposition. Try the url.
+    // Filename not found in content-disposition. Try the url, or use the location if found.
     else {
 	char sep = '/';
 	char php = '?';  // To hopefully remove any pesky trailing php arguments
-	size_t s = url.rfind(sep, url.length());
+	char amp = '&';  // For other types of arguments
+	size_t s;
+	std::string location = hdrs.location;
+
+	if (location.compare("None") != 0)
+	    s = location.rfind(sep);
+	else
+	    s = url.rfind(sep);
 
 	if (s != std::string::npos) {
-	    filename = url.substr(s+1, url.length() - s);
-	    size_t p = filename.rfind(php, filename.length());
+	    if (location.compare("None") != 0)
+		filename = location.substr(s+1, location.length() - s);
+	    else
+		filename = url.substr(s+1, url.length() - s);
+
+	    size_t p, a;
+	    p = filename.rfind(php);
 	    if (p != std::string::npos)
 		filename = filename.substr(0, p);
+	    a = filename.rfind(amp);
+	    if (a != std::string::npos)
+		filename = filename.substr(0, a);
 	}
 	// Last resort
 	else {
@@ -160,10 +179,12 @@ static curl_off_t get_resume_point(const std::string &fullpath, const headers &h
 
 
 /* Returns the full path to the file, and makes sure the filetype extension is appended to the filename */
-static std::string get_fullpath(const std::string &path, const std::string &filename, const std::string &filetype)
+static std::string get_fullpath(const std::string &path, const std::string &filename, const headers &hdrs)
 {
-    std::string fullpath;
+    std::string filetype = hdrs.content_type;
     std::string filetype_lower;
+    std::string location = hdrs.location;
+    std::string fullpath;
 
     if (path.back() != '/')
 	fullpath = path + '/' + filename;
@@ -175,8 +196,15 @@ static std::string get_fullpath(const std::string &path, const std::string &file
     for (size_t i = 0; i < filetype_lower.length(); i++)
 	filetype_lower[i] = std::tolower(static_cast<unsigned char>(filetype_lower[i]));
 
-    if (filetype != filetype_lower)
-	fullpath.append(filetype);
+    if (filetype != filetype_lower) {
+	/*
+	 * Add a special rule for .html if the location header was found,
+	 * since it would be inaccurate and the filename likely already
+	 * has the correct filetype appended from find_filename().
+	 */
+	if (location.compare("None") == 0 && filetype.compare(".html") != 0)
+	    fullpath.append(filetype);
+    }
 
     return fullpath;
 }
@@ -198,7 +226,7 @@ bool download(const std::string &url, const std::string &path, const std::string
 	if (fname.empty())
 	    fname = find_filename(url, path, hdrs, curl);
 	fname = fileops::clean_filename(fname);
-	fullpath = get_fullpath(path, fname, hdrs.content_type);
+	fullpath = get_fullpath(path, fname, hdrs);
 	*resume_point = get_resume_point(fullpath, hdrs);
 
 	/* Check that we have write permissions */

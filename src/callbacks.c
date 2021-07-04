@@ -22,14 +22,16 @@ size_t write_callback(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 
 /*
  * Custom callback function for CURLOPT_HEADERFUNCTION to extract header data.
- * Currently only used to get the filename if available.
+ * Currently only used to get the filename and location if available.
  */
 size_t header_callback(char *buffer, size_t size, size_t nitems, void *userdata)
 {
-    char *cd = (char *)userdata;
+    txt_headers *hdrs = (txt_headers *)userdata;
 
     // TODO: this leaves a trailing " character for some reason even though it's escaped
-    sscanf(buffer, "content-disposition: %*s %*s filename=\"%s\"", cd);
+    sscanf(buffer, "content-disposition: %*s %*s filename=\"%s\"", hdrs->content_disposition);
+
+    sscanf(buffer, "location: %s", hdrs->location);
 
     return nitems * size;
 }
