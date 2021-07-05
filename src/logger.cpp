@@ -5,13 +5,13 @@
 std::string err[] = {
     "Path is not writeable",
     "Couldn't download file",
-    "Tried but couldn't set file modification time to remote file time",
+    "\nTried but couldn't set file modification time to remote file time",
     "Couldn't open",
     "URL is empty. Did you specify a valid URL?"
 };
 
 std::string warn[] = {
-    "Couldn't determine file modification time",
+    "\nCouldn't determine file modification time",
     "Couldn't determine filename",
     "Couldn't determine filetype",
     "Remote and local file modification time match, but size is different.\nRedownloading"
