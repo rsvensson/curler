@@ -130,8 +130,8 @@ int progress_callback(void *ptr, double total_to_download, double now_downloaded
     }
 
     // Time left
-    int secs=0, mins=0, hours=0, days=0;
-    int n = (int)download_eta;
+    uint secs=0, mins=0, hours=0, days=0;
+    uint n = (uint)download_eta;
     if (n >= DAY) {
 	days = n / DAY;
 	n = n % DAY;
@@ -148,11 +148,11 @@ int progress_callback(void *ptr, double total_to_download, double now_downloaded
     char timeleft[16];
     int cx = 0;
     if (days && cx >=0 && cx < 16)
-	cx = snprintf(timeleft+cx, sizeof(timeleft), "%dD:", days);
+	cx += snprintf(timeleft+cx, sizeof(timeleft), "%dD:", days);
     if (hours && cx >=0 && cx < 16)
-	cx = snprintf(timeleft+cx, sizeof(timeleft), (hours < 10) ? "0%d:" : "%d:", hours);
+	cx += snprintf(timeleft+cx, sizeof(timeleft), (hours < 10) ? "0%d:" : "%d:", hours);
     if (mins && cx >=0 && cx < 16)
-	cx = snprintf(timeleft+cx, sizeof(timeleft), (mins < 10) ? "0%d:" : "%d:", mins);
+	cx += snprintf(timeleft+cx, sizeof(timeleft), (mins < 10) ? "0%d:" : "%d:", mins);
     if (!days && !hours && !mins && cx >=0 && cx < 16)  // Keep showing the minutes part
 	snprintf(timeleft+cx, sizeof(timeleft), (secs < 10) ? "00:0%d" : "00:%d", secs);
     else if (cx >= 0 && cx < 16)
