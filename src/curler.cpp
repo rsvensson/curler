@@ -88,8 +88,11 @@ static std::string find_filename(const std::string &url, const std::string &path
     if (strcmp(hdrs.content_disposition, "None") != 0) {
 	// Make sure we have a nice decoded filename if we found one
 	int outlength;
-	filename = curl_easy_unescape(curl, hdrs.content_disposition,
+	char *fname = curl_easy_unescape(curl, hdrs.content_disposition,
 				      strlen(hdrs.content_disposition), &outlength);
+	filename = fname;
+	curl_free(fname);
+
 	// Temp workaround for removing the trailing "
 	filename.pop_back();
     }
@@ -181,9 +184,9 @@ static curl_off_t get_resume_point(const std::string &fullpath, const headers &h
 /* Returns the full path to the file, and makes sure the filetype extension is appended to the filename */
 static std::string get_fullpath(const std::string &path, const std::string &filename, const headers &hdrs)
 {
+    std::string location = hdrs.location;
     std::string filetype = hdrs.content_type;
     std::string filetype_lower;
-    std::string location = hdrs.location;
     std::string fullpath;
 
     if (path.back() != '/')
@@ -196,6 +199,7 @@ static std::string get_fullpath(const std::string &path, const std::string &file
     for (size_t i = 0; i < filetype_lower.length(); i++)
 	filetype_lower[i] = std::tolower(static_cast<unsigned char>(filetype_lower[i]));
 
+    // Make sure filetype is appended
     if (filetype != filetype_lower) {
 	/*
 	 * Add a special rule for .html if the location header was found,
