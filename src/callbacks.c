@@ -149,8 +149,10 @@ int progress_callback(void *ptr, double total_to_download, double now_downloaded
     int cx = 0;
     if (days && cx >=0 && cx < 16)
 	cx += snprintf(timeleft+cx, sizeof(timeleft), "%dD:", days);
-    if (hours && cx >=0 && cx < 16)
+    if (hours && mins && cx >=0 && cx < 16)
 	cx += snprintf(timeleft+cx, sizeof(timeleft), (hours < 10) ? "0%d:" : "%d:", hours);
+    if (hours && !mins && cx >=0 && cx < 16) // Keep showing the minutes part
+	cx += snprintf(timeleft+cx, sizeof(timeleft), (hours < 10) ? "0%d:00:" : "%d:00:", hours);
     if (mins && cx >=0 && cx < 16)
 	cx += snprintf(timeleft+cx, sizeof(timeleft), (mins < 10) ? "0%d:" : "%d:", mins);
     if (!days && !hours && !mins && cx >=0 && cx < 16)  // Keep showing the minutes part
