@@ -7,6 +7,7 @@
 #include <curl/curl.h>
 #include <string.h>
 
+
 struct headers {
     long long content_length = 0;
     char content_type[16] = "";
@@ -17,62 +18,82 @@ struct headers {
 
 
 /* Function prototypes */
-static headers get_headers(const std::string &url, CURL *curl);
-static std::string find_filename(const std::string &url, const std::string &path,
-				 const headers &hdrs, CURL *curl);
-static curl_off_t get_resume_point(const std::string &fullpath,
-				    const headers &hdrs);
+bool download(const std::string &url, const std::string &path,
+	      const std::string &filename);
+static std::string find_filename(const std::string &url,
+				 const std::string &path, const headers &hdrs,
+				 CURL *curl);
 static std::string get_fullpath(const std::string &path,
 				const std::string &filename,
 				const headers &hdrs);
-bool download(const std::string &url, const std::string &path,
-	      const std::string &filename);
+static headers get_headers(const std::string &url, CURL *curl);
+static curl_off_t get_resume_point(const std::string &fullpath,
+				   const headers &hdrs);
 
 
-static headers get_headers(const std::string &url, CURL *curl)
+bool download(const std::string &url, const std::string &path, const std::string &filename)
 {
-    headers hdrs;
-    txt_headers thdrs;
-    char *content_type = nullptr;
-    double content_length = 0.0;
-    time_t filetime = 0;
+    CURL *curl = curl_easy_init();
 
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
-    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
-    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &thdrs);
-    curl_easy_perform(curl);
+    if (curl) {
+	curl_off_t *resume_point = new curl_off_t;
+	CURLcode res;
+	FILE *fp;
+	headers hdrs = get_headers(url, curl);
+	std::string fname = filename;
+	std::string fullpath;
 
-    curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &content_length);
-    curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &content_type);
-    curl_easy_getinfo(curl, CURLINFO_FILETIME, &filetime);
 
-    strcpy(hdrs.content_disposition, thdrs.content_disposition);
-    strcpy(hdrs.location, thdrs.location);
-    hdrs.content_length = static_cast<long long>(content_length);
-    hdrs.filetime = filetime;
+	if (fname.empty())
+	    fname = find_filename(url, path, hdrs, curl);
+	fname = fileops::clean_filename(fname);
+	fullpath = get_fullpath(path, fname, hdrs);
+	*resume_point = get_resume_point(fullpath, hdrs);
 
-    if (content_type) {
-	// Some web servers print out the charset part in upper and some in lower case...
-	for (auto it = content_type; *it != '\0'; it++)
-	    *it = std::tolower(static_cast<unsigned char>(*it));
-    }
+	/* Check that we have write permissions */
+	if (!fileops::is_writeable(path)) {
+	    log(err[FILE_ERR_PERMS]);
+	    curl_easy_cleanup(curl);
+	    delete resume_point;
+	    return false;
+	}
 
-    if (content_type && mimetypes.find(content_type) != mimetypes.end())
-	strcpy(hdrs.content_type, mimetypes.at(content_type).c_str());
-    else if (url.substr( url.rfind('/') ).rfind('.') != std::string::npos)  // Try to get extension from the url.
-	strcpy(hdrs.content_type, url.substr(url.rfind('.')).c_str());
-    else {
-	// Can't determine file type. Set to .bin
-	log(warn[FILE_WARN_FILETYPE]);
-	strcpy(hdrs.content_type, ".bin");
-    }
+	// Already downloaded, skipping
+	if (*resume_point == -1) {
+	    curl_easy_cleanup(curl);
+	    delete resume_point;
+	    return true;
+	}
 
-    curl_easy_reset(curl);
+	if (*resume_point != 0)
+	    fp = std::fopen(fullpath.c_str(), "a+b");
+	else
+	    fp = std::fopen(fullpath.c_str(), "wb");
+	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+	curl_easy_setopt(curl, CURLOPT_RESUME_FROM_LARGE, *resume_point);
+	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+	curl_easy_setopt(curl, CURLOPT_PROGRESSFUNCTION, progress_callback);
+	curl_easy_setopt(curl, CURLOPT_PROGRESSDATA, resume_point);
+	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
 
-    return hdrs;
+	log(info[FILE_INFO_DOWNLOAD], fullpath);
+	res = curl_easy_perform(curl);
+	std::fclose(fp);
+
+	// Try to set file modification time to remote file time
+	if ((CURLE_OK == res) && (hdrs.filetime >= 0)) {
+	    if (!fileops::set_filetime(fullpath, hdrs.filetime))
+		log(err[FILE_ERR_FILETIME]);
+	} else
+	    log(warn[FILE_WARN_FILETIME]);
+
+	curl_easy_cleanup(curl);
+	delete resume_point;
+	return true;
+    } else
+	return false;
 }
 
 
@@ -89,7 +110,7 @@ static std::string find_filename(const std::string &url, const std::string &path
 	// Make sure we have a nice decoded filename if we found one
 	int outlength;
 	char *fname = curl_easy_unescape(curl, hdrs.content_disposition,
-				      strlen(hdrs.content_disposition), &outlength);
+					 strlen(hdrs.content_disposition), &outlength);
 	filename = fname;
 	curl_free(fname);
 
@@ -140,6 +161,92 @@ static std::string find_filename(const std::string &url, const std::string &path
 }
 
 
+/* Returns the full path to the file, and makes sure the filetype extension is appended to the filename */
+static std::string get_fullpath(const std::string &path, const std::string &filename, const headers &hdrs)
+{
+    std::string location = hdrs.location;
+    std::string filetype = hdrs.content_type;
+    std::string filetype_lower;
+    std::string fullpath;
+
+    if (path.back() != '/')
+	fullpath = path + '/' + filename;
+    else
+	fullpath = path + filename;
+
+    // Lowercase filetype in case the filename uses uppercase for the extension.
+    filetype_lower = fullpath.substr(fullpath.length() - filetype.length());
+    for (size_t i = 0; i < filetype_lower.length(); i++)
+	filetype_lower[i] = std::tolower(static_cast<unsigned char>(filetype_lower[i]));
+
+    // Make sure filetype is appended
+    if (filetype != filetype_lower) {
+	/*
+	 * Add a special rule for .html if the location header was found,
+	 * since it would be inaccurate and the filename likely already
+	 * has the correct filetype appended from find_filename().
+	 */
+	if (location.compare("None") == 0
+	    || (location.compare("None") != 0 && filetype.compare(".html") != 0))
+	    fullpath.append(filetype);
+    }
+
+    return fullpath;
+}
+
+/*
+ * Uses curl to fetch headers to get the content-type, content-disposition,
+ * content-length, file modification time, and file location if applicable.
+ * Will reset the curl options back to the default when finished, but will
+ * keep the connection alive.
+ */
+static headers get_headers(const std::string &url, CURL *curl)
+{
+    headers hdrs;
+    txt_headers thdrs;
+    char *content_type = nullptr;
+    double content_length = 0.0;
+    time_t filetime = 0;
+
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
+    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &thdrs);
+    curl_easy_perform(curl);
+
+    curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &content_length);
+    curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &content_type);
+    curl_easy_getinfo(curl, CURLINFO_FILETIME, &filetime);
+
+    strcpy(hdrs.content_disposition, thdrs.content_disposition);
+    strcpy(hdrs.location, thdrs.location);
+    hdrs.content_length = static_cast<long long>(content_length);
+    hdrs.filetime = filetime;
+
+    if (content_type) {
+	// Some web servers print out the charset part in upper and some in lower case...
+	for (auto it = content_type; *it != '\0'; it++)
+	    *it = std::tolower(static_cast<unsigned char>(*it));
+    }
+
+    if (content_type && mimetypes.find(content_type) != mimetypes.end())
+	strcpy(hdrs.content_type, mimetypes.at(content_type).c_str());
+    else if (url.substr( url.rfind('/') ).rfind('.') != std::string::npos)  // Try to get extension from the url.
+	strcpy(hdrs.content_type, url.substr(url.rfind('.')).c_str());
+    else {
+	// Can't determine file type. Set to .bin
+	log(warn[FILE_WARN_FILETYPE]);
+	strcpy(hdrs.content_type, ".bin");
+    }
+
+    curl_easy_reset(curl);
+
+    return hdrs;
+}
+
+
 /*
  * Checks if a file has already been downloaded, and if so checks if it should
  * be skipped or if we should resume the download.
@@ -178,102 +285,4 @@ static curl_off_t get_resume_point(const std::string &fullpath, const headers &h
     } else {
 	return 0;
     }
-}
-
-
-/* Returns the full path to the file, and makes sure the filetype extension is appended to the filename */
-static std::string get_fullpath(const std::string &path, const std::string &filename, const headers &hdrs)
-{
-    std::string location = hdrs.location;
-    std::string filetype = hdrs.content_type;
-    std::string filetype_lower;
-    std::string fullpath;
-
-    if (path.back() != '/')
-	fullpath = path + '/' + filename;
-    else
-	fullpath = path + filename;
-
-    // Lowercase filetype in case the filename uses uppercase for the extension.
-    filetype_lower = fullpath.substr(fullpath.length() - filetype.length());
-    for (size_t i = 0; i < filetype_lower.length(); i++)
-	filetype_lower[i] = std::tolower(static_cast<unsigned char>(filetype_lower[i]));
-
-    // Make sure filetype is appended
-    if (filetype != filetype_lower) {
-	/*
-	 * Add a special rule for .html if the location header was found,
-	 * since it would be inaccurate and the filename likely already
-	 * has the correct filetype appended from find_filename().
-	 */
-	if (location.compare("None") == 0
-	    || (location.compare("None") != 0 && filetype.compare(".html") != 0))
-	    fullpath.append(filetype);
-    }
-
-    return fullpath;
-}
-
-
-bool download(const std::string &url, const std::string &path, const std::string &filename)
-{
-    CURL *curl = curl_easy_init();
-
-    if (curl) {
-	curl_off_t *resume_point = new curl_off_t;
-	CURLcode res;
-	FILE *fp;
-	headers hdrs = get_headers(url, curl);
-	std::string fname = filename;
-	std::string fullpath;
-
-
-	if (fname.empty())
-	    fname = find_filename(url, path, hdrs, curl);
-	fname = fileops::clean_filename(fname);
-	fullpath = get_fullpath(path, fname, hdrs);
-	*resume_point = get_resume_point(fullpath, hdrs);
-
-	/* Check that we have write permissions */
-	if (!fileops::is_writeable(path)) {
-	    log(err[FILE_ERR_PERMS]);
-	    curl_easy_cleanup(curl);
-	    delete resume_point;
-	    return false;
-	}
-
-	if (*resume_point == -1) {
-	    curl_easy_cleanup(curl);
-	    delete resume_point;
-	    return true;
-	}
-	if (*resume_point != 0)
-	    fp = std::fopen(fullpath.c_str(), "a+b");
-	else
-	    fp = std::fopen(fullpath.c_str(), "wb");
-	curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-	curl_easy_setopt(curl, CURLOPT_RESUME_FROM_LARGE, *resume_point);
-	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
-	curl_easy_setopt(curl, CURLOPT_PROGRESSFUNCTION, progress_callback);
-	curl_easy_setopt(curl, CURLOPT_PROGRESSDATA, resume_point);
-	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-	curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
-
-	log(info[FILE_INFO_DOWNLOAD], fullpath);
-	res = curl_easy_perform(curl);
-	std::fclose(fp);
-
-	// Try to set file modification time to remote file time
-	if ((CURLE_OK == res) && (hdrs.filetime >= 0)) {
-	    if (!fileops::set_filetime(fullpath, hdrs.filetime))
-		log(err[FILE_ERR_FILETIME]);
-	} else
-	    log(warn[FILE_WARN_FILETIME]);
-
-	curl_easy_cleanup(curl);
-	delete resume_point;
-	return true;
-    } else
-	return false;
 }
